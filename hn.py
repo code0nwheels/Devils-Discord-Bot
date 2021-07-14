@@ -27,7 +27,8 @@ intents = discord.Intents().default()
 intents.members = True
 bot = Bot(command_prefix=PREFIX, intents=intents)
 bot.remove_command('help')
-TOKEN = 'NTAyNTQ3OTY0Mjg4NDM0MTk2.W8jQQw.3yuCKjpAyj2OzWOdrCTPdQVbGpU'
+with open('token', 'w') as f:
+	TOKEN = f.read().strip()
 cfg = settings.Settings()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)

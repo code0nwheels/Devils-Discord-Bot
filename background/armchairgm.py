@@ -9,8 +9,6 @@ import discord
 from bs4 import BeautifulSoup
 from util import create_embed
 
-# TOKEN = "NzYzMTQ0MDQ3OTQxNzc5NDY3.X3zbRw.OrMsMObGbzy3qdo8xXxaT_lass8"
-# GUILD = 348223375598157825
 SOCIAL_MEDIA_FEED = 589238885700075522  # social-media-feed
 NUM_PAGES = 10  # Number of CapFriendly Pages Per Run
 RUN_INTERVAL = 7200  # Wait Interval (in seconds)
@@ -19,9 +17,6 @@ RUN_INTERVAL = 7200  # Wait Interval (in seconds)
 BASE_URL = "https://capfriendly.com"
 ARMCHAIR_URL = f"{BASE_URL}/armchair-gm"
 FILTER_TEAM = "New Jersey Devils"
-
-# intents = discord.Intents.all()
-# self.bot = discord.self.bot(intents=intents)
 
 logging.basicConfig(level=logging.INFO)
 
