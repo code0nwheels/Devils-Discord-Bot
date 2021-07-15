@@ -471,41 +471,6 @@ async def getconfig(ctx):
 
 	await ctx.send(embed=embed)
 
-@bot.command(name='zip', description='You know. ADMIN ONLY!')
-@has_permissions(administrator=True)
-async def zip(ctx):
-	log.info(f"{ctx.author.name} is creating a user for zs")
-
-	def check(msg):
-		return msg.author == ctx.author
-
-	await ctx.send("Enter a username")
-
-	user = await bot.wait_for("message", check=check)
-
-	await ctx.send("Enter a password")
-
-	pw = await bot.wait_for("message", check=check)
-
-	#os.system(f'ssh bryce@142.93.139.86 "echo \"{pw.content}\" | htpasswd -i /usr/share/nginx/html/.htpasswd {user.content}"')
-	p = Popen(['ssh', 'bryce@142.93.139.86', f'echo "{pw.content}" | htpasswd -i /usr/share/nginx/html/.htpasswd {user.content}'], stdout=PIPE, stderr=PIPE)
-
-	out, err = p.communicate()
-
-	async with ctx.typing():
-		while p.poll() is None:
-			await asyncio.sleep(0.5)
-
-	msg = out.decode('utf-8')
-	if err.decode('utf-8') != '':
-		msg = err.decode('utf-8')
-
-	await ctx.send(msg)
-
-@zip.error
-async def getconfig_error(ctx, error):
-	log.exception(f"{ctx.author.name} tried to kill the bot")
-
 @bot.command(name='friedman', description='Generate an Elliotte Friedmanesque team name')
 async def friedman(ctx, *, team):
 	if len(team) < 4:
