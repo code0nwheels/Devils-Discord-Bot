@@ -33,7 +33,7 @@ class GameChannel(object):
 		self.cfg = cfg
 		self.log = logging.getLogger(__name__)
 		# add a rotating handler
-		handler = RotatingFileHandler('/root/discord/hn/log/gamechannel.log', maxBytes=5*1024*1024,
+		handler = RotatingFileHandler('log/gamechannel.log', maxBytes=5*1024*1024,
 		                              backupCount=5)
 		# create a logging format
 		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')

@@ -33,7 +33,7 @@ cfg = settings.Settings()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 # add a rotating handler
-handler = RotatingFileHandler('/root/discord/hn/log/main.log', maxBytes=5*1024*1024,
+handler = RotatingFileHandler('log/main.log', maxBytes=5*1024*1024,
                               backupCount=5)
 
 # create a logging format
@@ -49,11 +49,11 @@ async def on_ready():
 	log.info("Starting GameChannel...")
 	bot.loop.create_task(gc.run())
 
-	agm = ArmchairGM(bot)
+	agm = ArmchairGM(bot, cfg)
 	log.info("Starting ArmchairGM...")
 	bot.loop.create_task(agm.run())
 
-	ft = FourTwenty(bot)
+	ft = FourTwenty(bot, cfg)
 	log.info("Starting FourTwenty...")
 	bot.loop.create_task(ft.run())
 
@@ -70,8 +70,7 @@ async def on_message(message):
 @bot.command(name="help", description="Returns all commands available")
 async def help(ctx):
 	commands = bot.commands
-	admin_role = get(bot.guilds[0].roles, id=348226061076791298)
-	admin = admin_role in ctx.author.roles
+	admin = ctx.message.author.guild_permissions.administrator
 
 	file, embed = await create_embed.help(admin, commands, PREFIX)
 
@@ -404,9 +403,111 @@ async def highlightchannel(ctx, action, *channels: discord.TextChannel):
 
 @highlightchannel.error
 async def highlightchannel_error(ctx, error):
-	log.info(f"{ctx.author.name} tried to sethighlightchannel")
+	log.info(f"{ctx.author.name} tried to highlightchannel")
 	if not isinstance(error, MissingPermissions):
 		await ctx.send(f"Invalid argument. `{PREFIX}highlightchannel <add/remove> <#channels>`")
+
+@bot.command(name='socialmediachannel', description='Set or remove channel(s) for socialmediachannels. ADMIN ONLY!')
+@has_permissions(administrator=True)
+async def socialmediachannel(ctx, action, *channels: discord.TextChannel):
+	log.info(f"{ctx.author.name} is {action} socialmediachannel channels: {str(channels)}")
+	channels_existing = await cfg.get_channels('SocialMediaChannels')
+	if action == 'add':
+		try:
+			if channels_existing is None:
+				await cfg.set_channels('SocialMediaChannels', [c.id for c in channels])
+			else:
+				add_channels = list(channels)
+				for echannel in channels_existing:
+					if echannel in channels:
+						add_channels.remove(echannel)
+				channels = channels_existing + add_channels
+				await cfg.set_channels('SocialMediaChannels', [c.id if isinstance(c, discord.Channel) else c for c in roles])
+			await ctx.message.add_reaction('✅')
+		except Exception as e:
+			log.exception("Error with updating socialmediachannel channels")
+			await ctx.message.add_reaction('❌')
+	elif action == 'remove':
+		try:
+			if channels_existing is None:
+				await ctx.message.add_reaction('❌')
+				await ctx.send("Oops, no channels are set. Try `add`ing some.")
+			else:
+				rem_channels = list(channels)
+				tmp = list(channels_existing)
+				for echannel in channels_existing:
+					if echannel in rem_channels:
+						tmp.remove(echannel)
+
+				if len(tmp) > 0:
+					channels = tmp
+					await cfg.set_channels('SocialMediaChannels', [c.id if isinstance(c, discord.Channel) else c for c in roles])
+				else:
+					channels = None
+					await cfg.set_channels('SocialMediaChannels', channels)
+				await ctx.message.add_reaction('✅')
+		except Exception as e:
+			log.exception("Error with deleting socialmediachannel channels")
+			await ctx.message.add_reaction('❌')
+	else:
+		await ctx.send(f"Invalid argument. `{PREFIX}socialmediachannel <add/remove> <#channels>`")
+
+@socialmediachannel.error
+async def socialmediachannel_error(ctx, error):
+	log.info(f"{ctx.author.name} tried to socialmediachannel")
+	if not isinstance(error, MissingPermissions):
+		await ctx.send(f"Invalid argument. `{PREFIX}socialmediachannel <add/remove> <#channels>`")
+
+@bot.command(name='fourtwentychannel', description='Set or remove channel(s) for fourtwentychannels. ADMIN ONLY!')
+@has_permissions(administrator=True)
+async def fourtwentychannel(ctx, action, *channels: discord.TextChannel):
+	log.info(f"{ctx.author.name} is {action} fourtwentychannel channels: {str(channels)}")
+	channels_existing = await cfg.get_channels('FourTwentyChannels')
+	if action == 'add':
+		try:
+			if channels_existing is None:
+				await cfg.set_channels('FourTwentyChannels', [c.id for c in channels])
+			else:
+				add_channels = list(channels)
+				for echannel in channels_existing:
+					if echannel in channels:
+						add_channels.remove(echannel)
+				channels = channels_existing + add_channels
+				await cfg.set_channels('FourTwentyChannels', [c.id if isinstance(c, discord.Channel) else c for c in roles])
+			await ctx.message.add_reaction('✅')
+		except Exception as e:
+			log.exception("Error with updating fourtwentychannel channels")
+			await ctx.message.add_reaction('❌')
+	elif action == 'remove':
+		try:
+			if channels_existing is None:
+				await ctx.message.add_reaction('❌')
+				await ctx.send("Oops, no channels are set. Try `add`ing some.")
+			else:
+				rem_channels = list(channels)
+				tmp = list(channels_existing)
+				for echannel in channels_existing:
+					if echannel in rem_channels:
+						tmp.remove(echannel)
+
+				if len(tmp) > 0:
+					channels = tmp
+					await cfg.set_channels('FourTwentyChannels', [c.id if isinstance(c, discord.Channel) else c for c in roles])
+				else:
+					channels = None
+					await cfg.set_channels('FourTwentyChannels', channels)
+				await ctx.message.add_reaction('✅')
+		except Exception as e:
+			log.exception("Error with deleting fourtwentychannel channels")
+			await ctx.message.add_reaction('❌')
+	else:
+		await ctx.send(f"Invalid argument. `{PREFIX}fourtwentychannel <add/remove> <#channels>`")
+
+@fourtwentychannel.error
+async def fourtwentychannel_error(ctx, error):
+	log.info(f"{ctx.author.name} tried to fourtwentychannel")
+	if not isinstance(error, MissingPermissions):
+		await ctx.send(f"Invalid argument. `{PREFIX}fourtwentychannel <add/remove> <#channels>`")
 
 @bot.command(name='setrole', description='Set role for users. ADMIN ONLY!')
 @has_permissions(administrator=True)
@@ -460,10 +561,10 @@ async def getconfig(ctx):
 	log.info(f"{ctx.author.name} is getting config")
 	names = ["Game Channels", "Game Channels Role", "Highlight Channels", "Auto Stream Watcher"]
 
-	gc = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('GameChannels'))
-	gr = ', '.join(f"<@&{r}>" for r in await cfg.get_roles('GameChannels'))
-	hc = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('HighlightChannels'))
-	ar = ', '.join(f"<@{r}>" for r in await cfg.get_auto_role_users('GameChannels'))
+	gc = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('GameChannels')) if await cfg.get_channels('GameChannels') else 'None'
+	gr = ', '.join(f"<@&{r}>" for r in await cfg.get_roles('GameChannels')) if await cfg.get_roles('GameChannels') else 'None'
+	hc = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('HighlightChannels')) if await cfg.get_channels('HighlightChannels') else 'None'
+	ar = ', '.join(f"<@{r}>" for r in await cfg.get_auto_role_users('GameChannels')) if await cfg.get_auto_role_users('GameChannels') else 'None'
 
 	values = [gc, gr, hc, ar]
 
@@ -536,7 +637,7 @@ async def kill(ctx):
 async def kill_error(ctx, error):
 	log.info(f"{ctx.author.name} tried to kill the bot")
 
-lockfile = "/root/discord/hn/background/highlights.lock"
+lockfile = "background/highlights.lock"
 if os.path.exists(lockfile):
 	os.remove(lockfile)
 bot.run(TOKEN)

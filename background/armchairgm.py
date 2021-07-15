@@ -9,10 +9,11 @@ import discord
 from bs4 import BeautifulSoup
 from util import create_embed
 
-SOCIAL_MEDIA_FEED = 589238885700075522  # social-media-feed
+from datetime import datetime, timedelta
+from tzlocal import get_localzone
+import pytz
+
 NUM_PAGES = 10  # Number of CapFriendly Pages Per Run
-RUN_INTERVAL = 7200  # Wait Interval (in seconds)
-# SOCIAL_MEDIA_FEED = 826459474821775400	  # donders-testing
 
 BASE_URL = "https://capfriendly.com"
 ARMCHAIR_URL = f"{BASE_URL}/armchair-gm"
@@ -22,19 +23,20 @@ logging.basicConfig(level=logging.INFO)
 
 
 class ArmchairGM(object):
-	def __init__(self, bot):
+	def __init__(self, bot, cfg):
 		super(ArmchairGM, self).__init__()
 		self.bot = bot
-
+		self.cfg = cfg
 		self.log = logging.getLogger(__name__)
 
 		handler = RotatingFileHandler(
-			"/root/discord/hn/log/armchairgm.log", maxBytes=5 * 1024 * 1024, backupCount=5
+			"log/armchairgm.log", maxBytes=5 * 1024 * 1024, backupCount=5
 		)
 		# create a logging format
 		formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
+
 
 	async def get_latest_armchairs(self, page=1):
 		paged_url = f"{ARMCHAIR_URL}?page={page}"
@@ -78,48 +80,73 @@ class ArmchairGM(object):
 
 	async def run(self):
 		while True:
-			# text_channels = guild.text_channels
-			# social_channel = next(x for x in text_channels if x.id == SOCIAL_MEDIA_FEED)
-			social_channel = self.bot.get_channel(SOCIAL_MEDIA_FEED)
-			self.log.info(social_channel)
-			channel_history = await social_channel.history(limit=800).flatten()
-			titles = []
-			urls = []
+			try:
+				localtz = get_localzone()
+				curdt = localtz.localize(datetime.now())
+				ettz = pytz.timezone('US/Eastern')
+				curdt = curdt.astimezone(ettz)
 
-			for i in range(1, NUM_PAGES):
-				armchairs = await self.get_latest_armchairs(page=i)
-				for i in armchairs:
-					send_armchair = True
-					name = i["name"]
-					url = i["url"]
-					team = i["team"]
+				if curdt.hour % 2 == 0 and curdt.minute == 0:
+					self.log.info("Time to scrape!")
+					channels = await self.cfg.get_channels('SocialMediaChannels')
+					social_channel = self.bot.get_channel(channels[0])
+					self.log.info(social_channel)
+					channel_history = await social_channel.history(limit=800).flatten()
+					titles = []
+					urls = []
 
-					self.log.info("Checking channel history (800 posts) for this Armchair GM post by URL.")
-					for message in channel_history:
-						if url in message.clean_content:
-							self.log.info("Armchair already sent - skip this one.")
-							send_armchair = False
-							break
+					for i in range(1, NUM_PAGES):
+						armchairs = await self.get_latest_armchairs(page=i)
+						for i in armchairs:
+							send_armchair = True
+							name = i["name"]
+							url = i["url"]
+							team = i["team"]
 
-						if message.embeds:
-							embed = message.embeds[0].to_dict()
-							if embed.get("title") is None or "ARMCHAIR GM" not in embed.get("title"):
-								self.log.info("This is not an armchair GM post.")
+							self.log.info("Checking channel history (800 posts) for this Armchair GM post by URL.")
+							for message in channel_history:
+								if url in message.clean_content:
+									#self.log.info("Armchair already sent - skip this one.")
+									send_armchair = False
+									break
+
+								if message.embeds:
+									embed = message.embeds[0].to_dict()
+									if embed.get("title") is None or "ARMCHAIR GM" not in embed.get("title"):
+										#self.log.info("This is not an armchair GM post.")
+										continue
+									if url in str(embed):
+										send_armchair = False
+										break
+
+							if send_armchair == False:
 								continue
-							if url in str(embed):
-								send_armchair = False
-								break
 
-					if send_armchair == False:
-						continue
+							self.log.info("URL not detected - adding to list.")
+							titles.append(name + f" ({team})")
+							urls.append(url)
+							#message_text = f"🪑 **CapFriendly Armchair GM** - {name}\n<{url}>"
+							#await social_channel.send(message_text)
+					if len(titles) > 0:
+						embed = await create_embed.create("ARMCHAIR GM", "", titles, urls, "")
+						self.log.info("Sending embed.")
+						await social_channel.send(embed=embed)
 
-					self.log.info("URL not detected - adding to list.")
-					titles.append(name + f" ({team})")
-					urls.append(url)
-					#message_text = f"🪑 **CapFriendly Armchair GM** - {name}\n<{url}>"
-					#await social_channel.send(message_text)
-			if len(titles) > 0:
-				embed = await create_embed.create("ARMCHAIR GM", "", titles, urls, "")
-				self.log.info("Sending embed.")
-				await social_channel.send(embed=embed)
-			await asyncio.sleep(RUN_INTERVAL)
+					sleep = 7200 - datetime.now().second
+					self.log.info(f"Sleeping for {str(sleep)} seconds...")
+					await asyncio.sleep(sleep)
+				else:
+					if curdt.hour % 2 != 0:
+						hours = 1
+					else:
+						hours = 2
+
+					next_even = curdt + timedelta(hours=hours)
+					next_even = next_even.replace(minute=0, second=0, microsecond=0)
+
+					sleep = next_even.timestamp() - curdt.timestamp()
+					self.log.info(f"Sleeping for {str(sleep)} seconds...")
+					await asyncio.sleep(sleep)
+			except Exception:
+				self.log.exception("Error in main loop")
+				await asyncio.sleep(60)

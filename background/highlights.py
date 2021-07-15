@@ -24,7 +24,7 @@ class Highlights(object):
 		self.log = logging.getLogger(__name__)
 		self.bot = bot
 		# add a rotating handler
-		handler = RotatingFileHandler('/root/discord/hn/log/highlights.log', maxBytes=5*1024*1024,
+		handler = RotatingFileHandler('log/highlights.log', maxBytes=5*1024*1024,
 		                              backupCount=5)
 		# create a logging format
 		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -45,8 +45,8 @@ class Highlights(object):
 		return await messageObj.edit(embed=embed)
 
 	async def run(self):
-		lockfile = "/root/discord/hn/background/highlights.lock"
-		highlight_file = f'/root/discord/hn/background/json/{str(self.game_id)}_highlight.json'
+		lockfile = "background/highlights.lock"
+		highlight_file = f'background/json/{str(self.game_id)}_highlight.json'
 		if os.path.exists(lockfile):
 			return
 		else:
