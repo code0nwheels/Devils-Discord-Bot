@@ -666,15 +666,12 @@ async def banish(ctx, *users: discord.Member):
 		except:
 			await ctx.send("Problem writing roles to file! User isn't banished!")
 
-		for role in user.roles:
-			try:
-				await user.remove_roles(role)
-			except:
-				pass
-
+		broles = []
 		for r in await cfg.get_roles('BanishedRole'):
-			role = get(ctx.guild.roles, id=int(r))
-			await user.add_roles(role)
+			broles.append(get(ctx.guild.roles, id=int(r)))
+
+		await user.edit(roles=broles)
+
 
 @banish.error
 async def banish_error(ctx, error):
@@ -700,16 +697,16 @@ async def unbanish(ctx, *users: discord.Member):
 
 		roles = roles.split(',')
 
-		for r in await cfg.get_roles('BanishedRole'):
+		"""for r in await cfg.get_roles('BanishedRole'):
 			brole = get(ctx.guild.roles, id=int(r))
-			await user.remove_roles(brole)
+			await user.remove_roles(brole)"""
 
+		add_roles = []
 		for role in roles:
-			add_role = get(ctx.guild.roles, id=int(role))
-			try:
-				await user.add_roles(add_role)
-			except:
-				pass
+			add_roles.append(get(ctx.guild.roles, id=int(role)))
+
+		await user.edit(roles=add_roles)
+
 		os.remove("banished/" + uid)
 
 @unbanish.error
