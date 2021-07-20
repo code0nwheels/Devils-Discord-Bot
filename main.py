@@ -13,6 +13,7 @@ from typing import Union
 from subprocess import Popen, PIPE
 import re
 import random
+import aiofiles
 
 import asyncio
 
@@ -253,6 +254,58 @@ async def gamechatrole_error(ctx, error):
 	log.info(f"{ctx.author.name} tried to gamechatrole")
 	if not isinstance(error, MissingPermissions):
 		await ctx.send(f"Invalid argument. `{PREFIX}gamechatrole <add/remove> <@roles>`")
+
+
+@bot.command(name='banishedrole', description='Set or remove role(s) for banished role. ADMIN ONLY!')
+@has_permissions(administrator=True)
+async def banishedrole(ctx, action, *roles: discord.Role):
+	log.info(f"{ctx.author.name} is {action} roles: {str(roles)}")
+	roles_existing = await cfg.get_roles('BanishedRole')
+	if action == 'add':
+		try:
+			if roles_existing is None:
+				await cfg.set_roles('BanishedRole', [r.id for r in roles])
+			else:
+				add_roles = list(roles)
+				for erole in roles_existing:
+					if erole in roles:
+						add_roles.remove(erole)
+				roles = roles_existing + add_roles
+				await cfg.set_roles('BanishedRole', [r.id if isinstance(r, discord.Role) else r for r in roles])
+			await ctx.message.add_reaction('✅')
+		except Exception as e:
+			log.exception("Error with updating banished role roles")
+			await ctx.message.add_reaction('❌')
+	elif action == 'remove':
+		try:
+			if roles_existing is None:
+				await ctx.message.add_reaction('❌')
+				await ctx.send("Oops, no roles are set. Try `add`ing some.")
+			else:
+				rem_roles = list(roles)
+				tmp = list(roles_existing)
+				for erole in roles_existing:
+					if erole in rem_roles:
+						tmp.remove(erole)
+
+				if len(tmp) > 0:
+					roles = tmp
+					await cfg.set_roles('BanishedRole', [r.id if isinstance(r, discord.Role) else r for r in roles])
+				else:
+					roles = None
+					await cfg.set_roles('BanishedRole', roles)
+				await ctx.message.add_reaction('✅')
+		except Exception as e:
+			log.exception("Error with deleting banished roles")
+			await ctx.message.add_reaction('❌')
+	else:
+		await ctx.send(f"Invalid argument. `{PREFIX}banishedrole <add/remove> <@roles>`")
+
+@banishedrole.error
+async def banishedrole_error(ctx, error):
+	log.info(f"{ctx.author.name} tried to banishedrole")
+	if not isinstance(error, MissingPermissions):
+		await ctx.send(f"Invalid argument. `{PREFIX}banishedrole <add/remove> <@roles>`")
 
 @bot.command(name='autorole', description='Set Stream Watcher role for user(s) for game chat. ADMIN ONLY!')
 @has_permissions(administrator=True)
@@ -559,14 +612,17 @@ async def unsetrole_error(ctx, error):
 @has_permissions(administrator=True)
 async def getconfig(ctx):
 	log.info(f"{ctx.author.name} is getting config")
-	names = ["Game Channels", "Game Channels Role", "Highlight Channels", "Auto Stream Watcher"]
+	names = ["Game Channels", "Game Channels Role", "Highlight Channels", "Auto Stream Watcher", "Social Media Channels", "Four Twenty Channels", "Banished Roles"]
 
 	gc = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('GameChannels')) if await cfg.get_channels('GameChannels') else 'None'
 	gr = ', '.join(f"<@&{r}>" for r in await cfg.get_roles('GameChannels')) if await cfg.get_roles('GameChannels') else 'None'
 	hc = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('HighlightChannels')) if await cfg.get_channels('HighlightChannels') else 'None'
 	ar = ', '.join(f"<@{r}>" for r in await cfg.get_auto_role_users('GameChannels')) if await cfg.get_auto_role_users('GameChannels') else 'None'
+	smf = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('SocialMediaChannels')) if await cfg.get_channels('SocialMediaChannels') else 'None'
+	ft = ', '.join(f"<#{ch}>" for ch in await cfg.get_channels('FourTwentyChannels')) if await cfg.get_channels('FourTwentyChannels') else 'None'
+	br = ', '.join(f"<@&{r}>" for r in await cfg.get_roles('BanishedRole')) if await cfg.get_roles('BanishedRole') else 'None'
 
-	values = [gc, gr, hc, ar]
+	values = [gc, gr, hc, ar, smf, ft, br]
 
 	embed = await create_embed.create('Config', "Bot's settings", names, values, f"{PREFIX}getconfig")
 
@@ -594,6 +650,75 @@ async def friedman(ctx, *, team):
 		friedman = friedman + 'S'
 
 	await ctx.send(friedman.upper())
+
+@bot.command(name='banish', description='Banish users. ADMIN ONLY!')
+@has_permissions(administrator=True)
+async def banish(ctx, *users: discord.Member):
+	for user in users:
+		log.info(f"{ctx.author.name} is banishing {user.name}")
+
+		roles = ','.join([str(role.id) for role in user.roles])
+
+		uid = str(user.id)
+		try:
+			async with aiofiles.open("banished/" + uid, mode='w') as f:
+				await f.write(roles)
+		except:
+			await ctx.send("Problem writing roles to file! User isn't banished!")
+
+		for role in user.roles:
+			try:
+				await user.remove_roles(role)
+			except:
+				pass
+
+		for r in await cfg.get_roles('BanishedRole'):
+			role = get(ctx.guild.roles, id=int(r))
+			await user.add_roles(role)
+
+@banish.error
+async def banish_error(ctx, error):
+	log.info(f"{ctx.author.name} tried to banish users")
+	log.error(traceback.format_exc())
+
+	if not isinstance(error, MissingPermissions):
+		await ctx.send(f"Invalid argument. `{PREFIX}banish @user(s)`")
+
+@bot.command(name='unbanish', description='unbanish users. ADMIN ONLY!')
+@has_permissions(administrator=True)
+async def unbanish(ctx, *users: discord.Member):
+	for user in users:
+		log.info(f"{ctx.author.name} is unbanishing {user.name}")
+
+		uid = str(user.id)
+		try:
+			async with aiofiles.open("banished/" + uid, mode='r') as f:
+				roles = await f.read()
+		except:
+			await ctx.send("User isn't banished!")
+			return
+
+		roles = roles.split(',')
+
+		for r in await cfg.get_roles('BanishedRole'):
+			brole = get(ctx.guild.roles, id=int(r))
+			await user.remove_roles(brole)
+
+		for role in roles:
+			add_role = get(ctx.guild.roles, id=int(role))
+			try:
+				await user.add_roles(add_role)
+			except:
+				pass
+		os.remove("banished/" + uid)
+
+@unbanish.error
+async def unbanish_error(ctx, error):
+	log.info(f"{ctx.author.name} tried to unbanish users")
+	log.error(traceback.format_exc())
+
+	if not isinstance(error, MissingPermissions):
+		await ctx.send(f"Invalid argument. `{PREFIX}unbanish @user(s)`")
 
 @getconfig.error
 async def getconfig_error(ctx, error):
