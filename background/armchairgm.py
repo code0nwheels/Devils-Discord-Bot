@@ -65,7 +65,6 @@ class ArmchairGM(object):
 			all_trade_teams = [x["alt"] for x in trade_teams]
 			m = re.search('^.*/(.*.svg)$', create_team)
 			team = m.group(1).replace(".svg", "").replace("_", " ").title()
-			team = ''.join([c for c in team if not c.isdigit()]).strip()
 			if create_team_filter not in create_team and "New Jersey Devils" not in all_trade_teams:
 				continue
 

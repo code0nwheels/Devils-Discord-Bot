@@ -3,10 +3,11 @@ import logging
 import re
 from logging.handlers import RotatingFileHandler
 from discord.utils import get
-from discord.ext.tasks import loop
+from discord.ext import tasks
 from discord.ext.commands import Bot
 from pytz import timezone
 from datetime import datetime, timedelta
+import time
 from tzlocal import get_localzone
 
 import asyncio
@@ -14,20 +15,17 @@ import asyncio
 from hockey import hockey
 from background.highlights import Highlights
 
-SCORE_TEMPLATE = "{away_team} {away_score} ({away_sog}) - {home_team} {home_score} ({home_sog})"
+TOPIC_TEMPLATE = "{away_team} at {home_team}"
 CLOSING_TIME = 5
 CLOSING_MSG = f"Closing chat in {CLOSING_TIME} minutes!"
-IN_GAME_SLEEP = 1
+IN_GAME_SLEEP = 2
 OPEN_MSG = "Game chat is open! We're playing the **{}**"
 CLOSE_MSG = "Chat is closed!\n{}"
 
 logging.basicConfig(level=logging.INFO)
 
 class GameChannel(object):
-	"""docstring for GameChannel."""
-
 	def __init__(self, bot, cfg):
-		super(GameChannel, self).__init__()
 		self.bot = bot
 		self.guild = self.bot.guilds[0]
 		self.cfg = cfg
@@ -40,13 +38,20 @@ class GameChannel(object):
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
 
-	async def open_channel(self, channel_id, role_id):
-		self.log.info(f"Opening {channel_id} for {role_id}...")
+	async def check_perms(self, channel_id, role_id):
+		self.log.info(f"Checking permissions for {channel_id} for {role_id}...")
+		channel = self.bot.get_channel(channel_id)
+		role = get(self.guild.roles, id=role_id)
+
+		cur_perms = channel.permissions_for(role)
+		return channel, role, cur_perms.send_messages
+
+	async def open_channel(self, channel, role):
+		self.log.info(f"Opening {channel} for {role}...")
 		try:
-			channel = self.bot.get_channel(channel_id)
-			role = get(self.guild.roles, id=role_id)
 			await channel.set_permissions(role, read_messages=True,
-															  send_messages=None)
+														  send_messages=None)
+
 		except Exception as e:
 			self.log.exception(f"Fatal error in opening {channel_id} for {role_id}")
 
@@ -60,100 +65,55 @@ class GameChannel(object):
 		except Exception as e:
 			self.log.exception(f"Fatal error in closing {channel_id} for {role_id}")
 
-	async def update_score(self, channel_id, new_topic):
-		self.log.info(f"Updating description with new score for {channel_id}...")
+	async def update_description(self, channel_id, new_topic):
+		self.log.info(f"Updating description for {channel_id}...")
 		try:
 			channel = self.bot.get_channel(channel_id)
 			await channel.edit(topic=new_topic)
 		except Exception as e:
-			self.log.exception(f"Fatal error in updating score for {channel_id}")
+			self.log.exception(f"Fatal error in updating description for {channel_id}")
 
-	async def stream_role(self, role, user, add):
-		if add:
-			user = await self.guild.fetch_member(int(user))
-			if role not in user.roles:
-				await user.add_roles(role)
-				await user.edit(nick='🌐 ' + user.display_name + ' 🌐')
-		else:
-			if '🌐' in user.display_name:
-				try:
-					name = re.sub('🌐', '', user.display_name).rstrip().strip()
-					await user.edit(nick=name)
-				except:
-					await user.edit(nick=None)
-
-			if role in user.roles:
-				await user.remove_roles(role)
-
-	async def get_score(self, game_id):
-		self.log.info("In get_score...")
+	async def monitor_game(self, game_id):
+		self.log.info("In monitor_game...")
 		try:
-			worker_tasks = []
-			game_info = await hockey.get_game_boxscore(game_id)
-			away_team = game_info['teams']['away']['team']['name']
-			home_team = game_info['teams']['home']['team']['name']
-			away_score = game_info['teams']['away']['teamStats']['teamSkaterStats']['goals']
-			home_score = game_info['teams']['home']['teamStats']['teamSkaterStats']['goals']
-			away_sog = game_info['teams']['away']['teamStats']['teamSkaterStats']['shots']
-			home_sog = game_info['teams']['home']['teamStats']['teamSkaterStats']['shots']
+			h = Highlights(self.bot, game_id, self.cfg)
+			self.log.info("Starting Highlights...")
+			try:
+				self.bot.loop.create_task(h.run())
+			except Exception:
+				self.log.exception("Error starting Highlights")
 
-			self.log.info("Updating description with score")
-			for channel_id in await self.cfg.get_channels('GameChannels'):
-				wt = asyncio.ensure_future(self.update_score(int(channel_id), SCORE_TEMPLATE.format(away_team=away_team, away_score=away_score, away_sog=away_sog, home_team=home_team, home_score=home_score, home_sog=home_sog)))
-				worker_tasks.append(wt)
-
-			results = await asyncio.gather(*worker_tasks)
-
-			while True:
-				is_game, game_info = await hockey.get_game(game_id)
-				if "In Progress" in game_info['status']['detailedState']:
-					h = Highlights(self.bot, game_info['gamePk'], self.cfg)
-					self.log.info("Starting Highlights...")
-					try:
-						self.bot.loop.create_task(h.run())
-					except Exception:
-						self.log.exception("Error starting Highlights")
-					finally:
-						break
-				await asyncio.sleep(60)
-
+			final = 0
 			while True:
 				try:
-					worker_tasks = []
-
-					game_info = await hockey.get_game_boxscore(game_id)
-					away_team = game_info['teams']['away']['team']['name']
-					home_team = game_info['teams']['home']['team']['name']
-					away_score = game_info['teams']['away']['teamStats']['teamSkaterStats']['goals']
-					home_score = game_info['teams']['home']['teamStats']['teamSkaterStats']['goals']
-					away_sog = game_info['teams']['away']['teamStats']['teamSkaterStats']['shots']
-					home_sog = game_info['teams']['home']['teamStats']['teamSkaterStats']['shots']
-
-					self.log.info("Updating description with new score")
-					for channel_id in await self.cfg.get_channels('GameChannels'):
-						wt = asyncio.ensure_future(self.update_score(int(channel_id), SCORE_TEMPLATE.format(away_team=away_team, away_score=away_score, away_sog=away_sog, home_team=home_team, home_score=home_score, home_sog=home_sog)))
-						worker_tasks.append(wt)
-
-					results = await asyncio.gather(*worker_tasks)
-
 					is_game, game_info = await hockey.get_game(game_id)
-					if game_info['status']['detailedState'] in ['Final', 'Game Over', 'Postponed'] and away_score != home_score:
-						self.log.info("Game ended. Leaving get score.")
-						break
+					status = game_info['status']['detailedState']
+					#self.log.info(f'Status: {status}\nFinal: {final}')
+					if status in ['Final', 'Game Over', 'Postponed']:# and away_score != home_score:
+						final += 1
 
-					await asyncio.sleep(IN_GAME_SLEEP * 60)
+						if final == 2:
+							self.log.info("Game ended. Leaving get score.")
+							#self.post_reminder.cancel()
+							return
+					elif final > 0:
+						final = 0
 				except Exception as e:
 					self.log.exception("Fatal error in getting score")
+				finally:
+					self.log.info(f"Sleeping...")
+					await asyncio.sleep((IN_GAME_SLEEP * 60) - (time.time() - start_loop))
 		except Exception as e:
 			self.log.exception("Fatal error in getting score")
 
-	async def send_message(self, channel_id, message):
-		self.log.info(f"Sending message to {channel_id}...")
+	async def send_message(self, channel, message):
+		self.log.info(f"Sending message to {channel}...")
 		try:
-			channel = self.bot.get_channel(channel_id)
-			await channel.send(message)
+			if isinstance(channel, int):
+				channel = self.bot.get_channel(channel_id)
+			return await channel.send(message)
 		except Exception as e:
-			self.log.exception(f"Fatal error in sending message to {channel_id}")
+			self.log.exception(f"Fatal error in sending message to {channel}")
 
 	async def run(self):
 		self.log.info("GameChannel started.")
@@ -171,40 +131,47 @@ class GameChannel(object):
 					#self.log.info(now, to)
 					await asyncio.sleep((to - now).total_seconds())
 					continue
+
+			away = await hockey.get_team(game_info['teams']['away']['team']['id'])
+			home = await hockey.get_team(game_info['teams']['home']['team']['id'])
+
+			utctz = timezone('UTC')
+			esttz = timezone('US/Eastern')
+			time = game_info['gameDate']
+			utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
+			utc2 = utctz.localize(utc)
+			est = utc2.astimezone(esttz)
+
+			gmdt = datetime.strftime(est, "%Y-%m-%dT%H:%M:%S")
+			self.log.info(f"Next game is {away['abbreviation']} @ {home['abbreviation']} {gmdt}.")
+
+			while True:
+				is_game, game_info = await hockey.next_game()
+				if 'TBD' in game_info['status']['detailedState'] or game_info['status']['startTimeTBD']:
+					time = 'TBD'
 				else:
-					away = await hockey.get_team(game_info['teams']['away']['team']['id'])
-					home = await hockey.get_team(game_info['teams']['home']['team']['id'])
+					time = datetime.strftime(est,  "%-I:%M %p")
+				date = datetime.strftime(est,  "%-m/%-d")
 
-					utctz = timezone('UTC')
-					esttz = timezone('US/Eastern')
-					time = game_info['gameDate']
-					utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
-					utc2 = utctz.localize(utc)
-					est = utc2.astimezone(esttz)
+				worker_tasks = []
+				for channel_id in await self.cfg.get_channels('GameChannels'):
+					self.log.info("Updating game channels category name")
+					channel = self.bot.get_channel(int(channel_id))
+					category = channel.category
 
-					gmdt = datetime.strftime(est, "%Y-%m-%dT%H:%M:%S")
-					self.log.info(f"Next game is {away['abbreviation']} @ {home['abbreviation']} {gmdt}.")
+					await category.edit(name=f"{away['abbreviation']} @ {home['abbreviation']} {date} {time}")
 
-					while True:
-						is_game, game_info = await hockey.next_game()
-						if 'TBD' in game_info['status']['detailedState'] or game_info['status']['startTimeTBD']:
-							time = 'TBD'
-						else:
-							time = datetime.strftime(est,  "%-I:%M %p")
-						date = datetime.strftime(est,  "%-m/%-d")
+					self.log.info("Updating description with teams")
+					wt = asyncio.ensure_future(self.update_description(int(channel_id), TOPIC_TEMPLATE.format(away_team=away['name'], home_team=home['name'])))
+					worker_tasks.append(wt)
 
-						for channel_id in await self.cfg.get_channels('GameChannels'):
-							self.log.info("Updating game channels category name")
-							channel = self.bot.get_channel(int(channel_id))
-							category = channel.category
+				results = await asyncio.gather(*worker_tasks)
 
-							await category.edit(name=f"{away['abbreviation']} @ {home['abbreviation']} {date} {time}")
-
-						if time != 'TBD':
-							break
-						else:
-							self.log.info("Time is TBD. Checking again in 60min.")
-							await asyncio.sleep(3600)
+				if time != 'TBD':
+					break
+				else:
+					self.log.info("Time is TBD. Checking again in 60min.")
+					await asyncio.sleep(3600)
 
 			pk = game_info['gamePk']
 			dttime = game_info['gameDate']
@@ -217,12 +184,13 @@ class GameChannel(object):
 					go = False
 					break
 
-				utc = datetime.strptime(dttime, "%Y-%m-%dT%H:%M:%SZ")  - timedelta(minutes=45)
+				fifteen_minutes_before_pg = datetime.strptime(dttime, "%Y-%m-%dT%H:%M:%SZ")  - timedelta(minutes=45)
+				pg = datetime.strptime(dttime, "%Y-%m-%dT%H:%M:%SZ")  - timedelta(minutes=30)
 
 				#loop until pregame
 				self.log.info(datetime.utcnow())
 				self.log.info(utc)
-				if datetime.utcnow() >= utc:
+				if datetime.utcnow() >= fifteen_minutes_before_pg:
 					self.log.info("Pregame!")
 					break
 				min = datetime.now().minute
@@ -232,76 +200,46 @@ class GameChannel(object):
 				await asyncio.sleep(sleep)
 
 			if go:
-				if game_info['status']['detailedState'] not in ['Final', 'Game Over', 'Postponed'] and "In Progress" not in game_info['status']['detailedState']:
-					self.log.info("Sending Stream Water message and sleeping for 15min...")
-					try:
-						role = get(self.guild.roles, id=801626115780509726)
-						channel = self.bot.get_channel(487770012984279040)
-						user = await self.bot.fetch_user(118795594830446592)
-						message = f"""<:njd:562468864835846187> **Welcome to our game chat!** <:njd:562468864835846187>
-This channel serves as our hub for discussion about Devils games as they happen.
-You can ask any Admin for a link to our server's private live stream for all Devils game, which is **NOT TO BE SHARED UNDER ANY CIRCUMSTANCES!**
+				open_channels = []
+				for channel_id in await self.cfg.get_channels('GameChannels'):
+					for role in await self.cfg.get_roles('GameChannels'):
+						channel, role, open = await self.check_perms(int(channel_id), int(role))
+						if not open:
+							open_channels.append([channel, role])
+				if game_info['status']['detailedState'] not in ['Final', 'Game Over', 'Postponed']:# and "In Progress" not in game_info['status']['detailedState']:
+					if datetime.utcnow() < pg:
+						sleep = (datetime.utcnow() - pg).total_seconds()
+						message = f"Opening in {round(sleep/60)} minutes!"
 
-Since there are Devils fans from all across the world on this server, not everyone will be watching the game in the same fashion. In order to alleviate spoilers of key game events for those watching on our provided stream (ZipStreams), we have implemented a **Stream Watcher System**.
+						if open_channels:
+							for o in open_channels:
+								wt = asyncio.ensure_future(self.send_message(o[0], message))
+								worker_tasks.append(wt)
 
-Between the opening of {channel.mention}, and the start of the game, Admins will be asking for users who are watching the game via ZipStreams, and who intend to remain active in chat for the length of the game. These users will be designated {role.mention}. They will have a uniquely colored name, and :globe_with_meridians: emojis surrounding their name.
-{user.mention} is always assumed to be a Stream Watcher.
+							messages = await asyncio.gather(*worker_tasks)
 
-**Reactions to key game events (subject but not limited to goals, saves, penalties, etc.) before the reaction of a Stream Watcher is prohibited, and will be enforced. (1 warning, followed by a mute for the duration of the game).**
-Afterwards, feel free to go crazy as usual.
+							worker_tasks = []
 
-You can always refer back to this message by checking the pinned messages of this channel (the grey pushpin icon in the top right of the window)
+							await asyncio.sleep(sleep)
 
-Enjoy the game, and **LET'S GO DEVILS!** <:WOO:562131980175540225>
-
-Game chat will open in 15 minutes!"""
-					except Exception:
-						message = "Opening in 15 minutes!"
-						self.log.exception("Error creating announcement")
-
-					for channel_id in await self.cfg.get_channels('GameChannels'):
-						wt = asyncio.ensure_future(self.send_message(int(channel_id), message))
-						worker_tasks.append(wt)
-
-					results = await asyncio.gather(*worker_tasks)
-
-					worker_tasks = []
-
-					min = datetime.now().minute
-					second = datetime.now().second
-					sleep = ((15 - (min % 15)) * 60) - second
-					await asyncio.sleep(sleep)
-
-					away_id = game_info['teams']['away']['team']['id']
-					if away_id == 1:
-						playing_against = game_info['teams']['home']['team']['name']
-					else:
-						playing_against = game_info['teams']['away']['team']['name']
-					#open chats
-					self.log.info("Opening game channels.")
-					for channel_id in await self.cfg.get_channels('GameChannels'):
-						for role in await self.cfg.get_roles('GameChannels'):
-							wt = asyncio.ensure_future(self.open_channel(int(channel_id), int(role)))
+					if open_channels:
+						away_id = game_info['teams']['away']['team']['id']
+						if away_id == 1:
+							playing_against = game_info['teams']['home']['team']['name']
+						else:
+							playing_against = game_info['teams']['away']['team']['name']
+						#open chats
+						self.log.info("Opening game channels.")
+						for o in open_channels:
+							wt = asyncio.ensure_future(self.open_channel(o[0], o[1]))
 							worker_tasks.append(wt)
-							wt = asyncio.ensure_future(self.send_message(int(channel_id), OPEN_MSG.format(playing_against)))
+							wt = asyncio.ensure_future(self.send_message(o[0], OPEN_MSG.format(playing_against)))
 							worker_tasks.append(wt)
 
-					results = await asyncio.gather(*worker_tasks)
+						results = await asyncio.gather(*worker_tasks)
 
-				self.log.info("Adding Stream Watcher room to users...")
-				try:
-					worker_tasks = []
-					role = get(self.guild.roles, id=801626115780509726)
-					for user in await self.cfg.get_auto_role_users('GameChannels'):
-						wt = asyncio.ensure_future(self.stream_role(role, user, True))
-						worker_tasks.append(wt)
-
-					results = await asyncio.gather(*worker_tasks)
-				except Exception:
-					self.log.exception("Error adding Stream Watcher room to users")
-
-				#monitor and update game channel topics with score
-				await self.get_score(game_info['gamePk'])
+				#monitor the game
+				await self.monitor_game(game_info['gamePk'])
 
 				#game over
 				self.log.info("Sending closing warning...")
@@ -311,17 +249,6 @@ Game chat will open in 15 minutes!"""
 					worker_tasks.append(wt)
 
 				results = await asyncio.gather(*worker_tasks)
-
-				self.log.info("Removing Stream Watcher room to users...")
-				try:
-					role = get(self.guild.roles, id=801626115780509726)
-					for user in role.members:
-						wt = asyncio.ensure_future(self.stream_role(role, user, False))
-						worker_tasks.append(wt)
-
-					results = await asyncio.gather(*worker_tasks)
-				except Exception:
-					self.log.exception("Error removing Stream Watcher room to users")
 
 				await asyncio.sleep(CLOSING_TIME*60)
 

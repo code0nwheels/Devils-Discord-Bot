@@ -52,6 +52,14 @@ class Highlights(object):
 		else:
 			open(lockfile, 'a').close()
 
+		while True:
+			is_game, game_info = await hockey.get_game(self.game_id)
+			if "In Progress" in game_info['status']['detailedState']:
+				break
+			elif "Postponed" in game_info['status']['detailedState']:
+				return
+			await asyncio.sleep(30)
+
 		if os.path.exists(highlight_file):
 			with open(highlight_file, 'r') as f:
 				highlight_cache = json.load(r)
