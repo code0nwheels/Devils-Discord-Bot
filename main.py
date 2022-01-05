@@ -9,10 +9,13 @@ from background.home_game import HomeGame
 import logging
 from logging.handlers import RotatingFileHandler
 
+import os
+
 intents = discord.Intents().default()
 intents.members = True
 client = commands.Bot(intents=intents)
 client.remove_command('help')
+client.owner_id = 364425223388528651
 with open('token', 'r') as f:
 	TOKEN = f.read().strip()
 cfg = settings.Settings()
@@ -30,7 +33,12 @@ log.addHandler(handler)
 client.load_extension('sql.database')
 client.load_extension('cogs.admins')
 client.load_extension('cogs.devils')
+client.load_extension('cogs.reflex')
 client.load_extension('cogs.help')
+
+lockfile = "background/highlights.lock"
+if os.path.exists(lockfile):
+	os.remove(lockfile)
 
 @client.event
 async def on_ready():

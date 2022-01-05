@@ -5,6 +5,9 @@ from util import create_embed
 import logging
 from logging.handlers import RotatingFileHandler
 
+with open('gid') as f:
+	guild_id = int(f.read().strip())
+
 class Help(commands.Cog):
 	def __init__(self, bot):
 		self.bot = bot
@@ -38,7 +41,7 @@ class Help(commands.Cog):
 
 		return paginator
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='help', description='List commands the bot has.')
+	@commands.slash_command(guild_ids=[guild_id], name='help', description='List commands the bot has.')
 	async def help(self, ctx):
 		cmds = {}
 

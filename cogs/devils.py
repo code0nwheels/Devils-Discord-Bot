@@ -14,6 +14,9 @@ import aiofiles
 import logging
 from logging.handlers import RotatingFileHandler
 
+with open('gid') as f:
+	guild_id = int(f.read().strip())
+
 class Devils(commands.Cog):
 	def __init__(self, bot):
 		self.bot = bot
@@ -29,7 +32,7 @@ class Devils(commands.Cog):
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='game', description='Gets game for a specific date. Defaults to today.')
+	@commands.slash_command(guild_ids=[guild_id], name='game', description='Gets game for a specific date. Defaults to today.')
 	async def game(self, ctx, date: Option(str, "Enter a date. Omit for today.", required=False) = None):
 		self.log.info(f"{ctx.author} is getting game for {str(date)}...")
 		if date:
@@ -89,7 +92,7 @@ class Devils(commands.Cog):
 			await ctx.respond(file=file, embed=embed)
 
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='nextgame', description='Gets the next upcoming game.')
+	@commands.slash_command(guild_ids=[guild_id], name='nextgame', description='Gets the next upcoming game.')
 	async def nextgame(self, ctx, games: Option(int, "Enter how many games in the future you want.", required=False) = None):
 		if not games:
 			self.log.info(f"{ctx.author} is getting the next upcoming game")
@@ -113,7 +116,7 @@ class Devils(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong.")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='lines', description='Gets lines from Dailyfaceoff.')
+	@commands.slash_command(guild_ids=[guild_id], name='lines', description='Gets lines from Dailyfaceoff.')
 	async def lines(self, ctx):
 		self.log.info(f"{ctx.author} is getting lines")
 		async with aiofiles.open("lines.txt", mode='r') as f:
@@ -139,7 +142,7 @@ class Devils(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong.")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='report', description='Report a message that breaks a rule anonymously.')
+	@commands.slash_command(guild_ids=[guild_id], name='report', description='Report a message that breaks a rule anonymously.')
 	async def report(self, ctx, message_link: Option(str, "Enter the message link in violation."), violation: Option(str, "Enter the violation.")):
 		error_message = """Invalid link. Please try again.\
 
@@ -165,7 +168,7 @@ class Devils(commands.Cog):
 		channel = get(ctx.guild.text_channels, name="member-reports")
 
 		names = ["Violation", "Content", "URL"]
-		values = [violation, messageObj.content, f"[Click here to view]({message_link})"]
+		vaslues = [violation, messageObj.content, f"[Click here to view]({message_link})"]
 
 		embed = await create_embed.create('Report', f"Message author: {messageObj.author} ({messageObj.author.id})", names, values, "")
 

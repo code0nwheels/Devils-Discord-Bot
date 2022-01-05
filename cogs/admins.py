@@ -3,16 +3,21 @@ from discord.ext import commands, pages
 from util import create_embed, settings, parseduration, timer
 from discord.utils import get
 from discord.commands import permissions, SlashCommandGroup, Option
+from discord.enums import ChannelType
 
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 
 import asyncio
+import os
 
 from typing import Union, Optional
 
 BANISH_TIMERS = {}
+
+with open('gid') as f:
+	guild_id = int(f.read().strip())
 
 class Admins(commands.Cog):
 	def __init__(self, bot):
@@ -126,7 +131,7 @@ class Admins(commands.Cog):
 				self.log.exception("Error with deleting roles")
 				await ctx.respond('Error. Have my owner check logs.')
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='open', description='Opens game chat. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='open', description='Opens game chat. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def open(self, ctx):
 		self.log.info(f"{ctx.author} opened game channels")
@@ -155,7 +160,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='close', description='Closes game chat. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='close', description='Closes game chat. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def close(self, ctx):
 		self.log.info(f"{ctx.author} closed game channels")
@@ -185,7 +190,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='gamechatrole', description='Set or remove role(s) for game chat. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='gamechatrole', description='Set or remove role(s) for game chat. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def gamechatrole(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), role: Option(discord.Role, "Enter the role the bot will edit permissions for to open/close game chat(s)")):
 		self.log.info(f"{ctx.author} is {action} roles: {str(role)}")
@@ -197,7 +202,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='banishedrole', description='Set or remove role(s) for banished role. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='banishedrole', description='Set or remove role(s) for banished role. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def banishedrole(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), role: Option(discord.Role, "Enter the role the bot will give to banished users")):
 		self.log.info(f"{ctx.author} is {action} roles: {str(role)}")
@@ -209,7 +214,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='gamechannel', description='Set or remove channel(s) for game chat. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='gamechannel', description='Set or remove channel(s) for game chat. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def gamechannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for game chat")):
 		self.log.info(f"{ctx.author} is {action} game channels: {str(channel)}")
@@ -221,7 +226,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='highlightchannel', description='Set or remove channel(s) for highlights. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='highlightchannel', description='Set or remove channel(s) for highlights. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def highlightchannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for highlights")):
 		self.log.info(f"{ctx.author} is {action} highlight channels: {str(channel)}")
@@ -233,7 +238,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='socialmediachannel', description='Set or remove channel(s) for socialmediachannels. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='socialmediachannel', description='Set or remove channel(s) for socialmediachannels. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def socialmediachannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for social media")):
 		self.log.info(f"{ctx.author} is {action} socialmediachannel channels: {str(channel)}")
@@ -245,7 +250,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='fourtwentychannel', description='Set or remove channel(s) for fourtwentychannels. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='fourtwentychannel', description='Set or remove channel(s) for fourtwentychannels. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def fourtwentychannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for...you know")):
 		self.log.info(f"{ctx.author} is {action} fourtwentychannel channels: {str(channel)}")
@@ -290,7 +295,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond(f"{user.name} has been stripped of a role called: {role.name}")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='role', description='Set role for users. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='role', description='Set role for users. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def role(self, ctx, role: Option(discord.Role, "Enter the role"), action: Option(str, "Choose the action", choices=['add', 'remove']), user: Option(discord.Member, "Enter the user")):
 		if action == 'add':
@@ -304,7 +309,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='getconfig', description='Gets bot\'s settings. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='getconfig', description='Gets bot\'s settings. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def getconfig(self, ctx):
 		self.log.info(f"{ctx.author} is getting config")
@@ -381,7 +386,7 @@ class Admins(commands.Cog):
 			timer_ = BANISH_TIMERS.pop(str(user.id))
 			timer_.cancel()
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='banish', description='Banish users. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='banish', description='Banish users. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def banish(self, ctx, user: Option(discord.Member, "Enter the user to unbanish"), duration: Option(str, "Enter the user to unbanish"), reason: Option(str, "Enter the reason for the banish") = 'None'):
 		global BANISH_TIMERS
@@ -448,7 +453,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='unbanish', description='Unbanish users. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='unbanish', description='Unbanish users. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def unbanish(self, ctx, user: Option(discord.Member, "Enter the user to unbanish")):
 		await self.unbanish_cb(user, ctx, True)
@@ -459,7 +464,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='restart', description='Restarts the bot. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='restart', description='Restarts the bot. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def restart(self, ctx):
 		self.log.info(f"{ctx.author} is restarting the bot")
@@ -473,9 +478,9 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='csay', description='Send a message to a specific channel as the bot. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='csay', description='Send a message to a specific channel as the bot. ADMIN ONLY!')
 	@permissions.has_role("Admins")
-	async def csay(self, ctx, channel: Option(discord.TextChannel, "Enter the channel to send the message to"), message: Option(str, "Enter the message to send. If you want to send multiple lines, omit.", required=False)=None):
+	async def csay(self, ctx, channel: Option(discord.TextChannel, "Enter the channel to send the message to", channel_types=[ChannelType.public_thread, ChannelType.private_thread]), message: Option(str, "Enter the message to send. If you want to send multiple lines, omit.", required=False)=None):
 		self.log.info(f"{ctx.author} is sending a message to {channel.name}")
 
 		def check(message: discord.Message):
@@ -500,7 +505,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='editmsg', description='Edit a message the bot posted. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='editmsg', description='Edit a message the bot posted. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def editmsg(self, ctx, message_id: Option(str, "Enter the message ID to edit")):
 		messageObj = await commands.MessageConverter().convert(ctx, message_id)
@@ -534,7 +539,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='reply', description='Reply to a message as the bot. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='reply', description='Reply to a message as the bot. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def reply(self, ctx, message_id: Option(str, "Enter the message ID to reply to"), message: Option(str, "Enter the message to send. If you want to send multiple lines, omit.", required=False)=None):
 		messageObj = await commands.MessageConverter().convert(ctx, message_id)
@@ -562,7 +567,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='kill', description='Kills the bot. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='kill', description='Kills the bot. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def kill(self, ctx):
 		self.log.info(f"{ctx.author} is killing the bot")
@@ -576,7 +581,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='incident', description='Create an incident report. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='incident', description='Create an incident report. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def incident(self, ctx, user: Option(discord.Member,"Enter the user you want to create an incident report for"), description: Option(str, "Enter the description of the incident"), decision: Option(str, "Enter the decision of the incident")):
 		self.log.info(f"{ctx.author} is creating an incident report.")
@@ -595,7 +600,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name="getincident", description="Gets incident reports for the specified user")
+	@commands.slash_command(guild_ids=[guild_id], name="getincident", description="Gets incident reports for the specified user")
 	@permissions.has_role("Admins")
 	async def getincident(self, ctx, user: Option(discord.Member, "Enter the user you want incident reports for")):
 		self.log.info(f"{ctx.author} is getting incident reports for user {user}")
@@ -625,7 +630,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[348223375598157825], name='timeout', description='Banish users. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='timeout', description='Banish users. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def timeout(self, ctx, user: Option(discord.Member, "Enter the user to timeout"), duration: Option(str, "Enter the duration"), reason: Option(str, "Enter the reason for the timeout") = 'None'):
 		self.log.info(f"{ctx.author} is timeouting {user.name}")

@@ -54,6 +54,7 @@ class Highlights(object):
 
 		while True:
 			is_game, game_info = await hockey.get_game(self.game_id)
+			self.log.info(game_info['status']['detailedState'])
 			if "In Progress" in game_info['status']['detailedState']:
 				break
 			elif "Postponed" in game_info['status']['detailedState']:

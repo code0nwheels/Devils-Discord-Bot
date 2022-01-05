@@ -20,11 +20,6 @@ class Database(commands.Cog):
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
 
-	def cog_unload(self):
-		if self.pool is not None:
-			self.pool.close()
-			self.loop.run_until_complete(self.pool.wait_close())
-
 	async def login(self):
 		with open("db.txt") as f:
 			dbinfo = f.read().split('\n')
@@ -33,6 +28,7 @@ class Database(commands.Cog):
 								user=dbinfo[0], password=dbinfo[1],
 								db=dbinfo[2], loop=self.bot.loop)
 	async def query(self, statement, *values):
+		good = False
 		if self.pool is None:
 			await self.login()
 		try:
@@ -41,14 +37,18 @@ class Database(commands.Cog):
 					try:
 						await cur.execute(statement, values)
 						await conn.commit()
-						return True
+						good = True
 					except Exception as e:
 						await conn.rollback()
 						self.log.exception("Error committing")
-						return False
 		except Exception as e:
 			self.log.exception("Error")
-			return False
+		finally:
+			self.pool.close()
+			await self.pool.wait_closed()
+			self.pool = None
+
+		return good
 
 	async def fetch(self, statement, *values):
 		if self.pool is None:
@@ -64,10 +64,12 @@ class Database(commands.Cog):
 					except Exception as e:
 						await conn.rollback()
 						self.log.exception("Error committing")
-						return None
 		except Exception as e:
 			self.log.exception("Error")
-			return None
+		finally:
+			self.pool.close()
+			await self.pool.wait_closed()
+			self.pool = None
 
 		return data
 

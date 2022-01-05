@@ -18,7 +18,7 @@ from background.highlights import Highlights
 TOPIC_TEMPLATE = "{away_team} at {home_team}"
 CLOSING_TIME = 5
 CLOSING_MSG = f"Closing chat in {CLOSING_TIME} minutes!"
-IN_GAME_SLEEP = 2
+IN_GAME_SLEEP = 1
 OPEN_MSG = "Game chat is open! We're playing the **{}**"
 CLOSE_MSG = "Chat is closed!\n{}"
 
@@ -102,7 +102,7 @@ class GameChannel(object):
 					self.log.exception("Fatal error in getting score")
 				finally:
 					self.log.info(f"Sleeping...")
-					await asyncio.sleep((IN_GAME_SLEEP * 60) - (time.time() - start_loop))
+					await asyncio.sleep((IN_GAME_SLEEP * 60))
 		except Exception as e:
 			self.log.exception("Fatal error in getting score")
 
@@ -110,7 +110,7 @@ class GameChannel(object):
 		self.log.info(f"Sending message to {channel}...")
 		try:
 			if isinstance(channel, int):
-				channel = self.bot.get_channel(channel_id)
+				channel = self.bot.get_channel(channel)
 			return await channel.send(message)
 		except Exception as e:
 			self.log.exception(f"Fatal error in sending message to {channel}")
