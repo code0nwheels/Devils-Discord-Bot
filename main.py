@@ -43,7 +43,6 @@ if os.path.exists(lockfile):
 @client.event
 async def on_ready():
 	log.info(f'client connected as {client.user}')
-	await client.change_presence(activity = discord.Game('Hockey'))
 
 	a = client.get_cog('Admins')
 	await a.setup_banished()

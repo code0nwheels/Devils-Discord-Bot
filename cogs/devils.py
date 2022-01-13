@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands, pages
 from discord.utils import get
-from util import create_embed
+from util import create_embed, settings
 from hockey import hockey
 
 from discord.commands import Option
@@ -20,6 +20,7 @@ with open('gid') as f:
 class Devils(commands.Cog):
 	def __init__(self, bot):
 		self.bot = bot
+		self.cfg = settings.Settings()
 
 		logging.basicConfig(level=logging.INFO)
 		self.log = logging.getLogger(__name__)
@@ -168,17 +169,53 @@ class Devils(commands.Cog):
 		channel = get(ctx.guild.text_channels, name="member-reports")
 
 		names = ["Violation", "Content", "URL"]
-		vaslues = [violation, messageObj.content, f"[Click here to view]({message_link})"]
+		values = [violation, messageObj.content, f"[Click here to view]({message_link})"]
 
 		embed = await create_embed.create('Report', f"Message author: {messageObj.author} ({messageObj.author.id})", names, values, "")
 
-		await channel.send(embed=embed)
+		admin_role = get(ctx.guild.roles, name="Admins")
+		await channel.send(admin_role.mention, embed=embed)
 
 		await ctx.respond("Thank you! I have notified the team.", ephemeral=True)
 
 	@report.error
-	async def report_error(ctx, error):
+	async def report_error(self, ctx, error):
 		self.log.error("Error with the report command")
+
+		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
+
+	@commands.slash_command(guild_ids=[guild_id], name='openhelp', description='Talk with the Admins in a private channel.')
+	async def openhelp(self, ctx, brief_description: Option(str, "Enter a brief message of what you want to discuss.")):
+		modmail_chan_id = await self.cfg.get_channels("ModMailChannels")
+		modmail_chan = get(ctx.guild.text_channels, id=modmail_chan_id[0])
+		no_of_active_threads = len(modmail_chan.threads)
+		archived_threads = modmail_chan.archived_threads(private=True)
+		no_of_archived_threads = len(await archived_threads.flatten())
+		print(no_of_archived_threads)
+		no_of_threads = no_of_active_threads + no_of_archived_threads
+
+		for thread_ in modmail_chan.threads:
+			if str(ctx.author).lower().replace('#', '') in thread_.name:
+				if not thread_.archived:
+					await ctx.respond(f"You already have a help thread open! {thread_.mention}", ephemeral=True)
+					return
+
+
+		thread = await modmail_chan.create_thread(name=str(ctx.author).lower() + f"-{no_of_threads+1}")
+
+		names = ["Description"]
+		values = [brief_description]
+
+		embed = await create_embed.create(f'{ctx.author} ({ctx.author.id})', f"Needs help.", names, values, "")
+
+		admin_role = get(ctx.guild.roles, name="Admins")
+		await thread.send(f"{ctx.author.mention} {admin_role.mention}", embed=embed)
+
+		await ctx.respond(f"Thank you! I have notified the team. Your thread is {thread.mention}", ephemeral=True)
+
+	@openhelp.error
+	async def openhelp_error( ctx, error):
+		self.log.error(f"Error with the openhelp command: {error}")
 
 		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
 

@@ -21,7 +21,6 @@ with open('gid') as f:
 
 class Admins(commands.Cog):
 	def __init__(self, bot):
-		global settingsG
 		self.bot = bot
 		self.cfg = settings.Settings()
 
@@ -262,6 +261,16 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
+	@commands.slash_command(guild_ids=[guild_id], name='modmailchannel', description='Set or remove channel(s) for modmailchannels. ADMIN ONLY!')
+	@permissions.has_role("Admins")
+	async def modmailchannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for ModMail")):
+		self.log.info(f"{ctx.author} is {action} modmailchannel channels: {str(channel)}")
+		await self.update_channel_setting(ctx, 'ModMailChannels', action, channel)
+
+	@modmailchannel.error
+	async def modmailchannel_error(self, ctx, error):
+		self.log.exception(f"{ctx.author} tried to modmailchannel")
+
 	async def setrole(self, ctx, role: discord.Role, user: discord.Member):
 		if int(ctx.author.id) not in [364425223388528651, int(ctx.guild.owner.id)]:
 			highest_role = ctx.author.roles[-1]
@@ -313,17 +322,17 @@ class Admins(commands.Cog):
 	@permissions.has_role("Admins")
 	async def getconfig(self, ctx):
 		self.log.info(f"{ctx.author} is getting config")
-		names = ["Game Channels", "Game Channels Role", "Highlight Channels", "Auto Stream Watcher", "Social Media Channels", "Four Twenty Channels", "Banished Roles"]
+		names = ["Game Channels", "Game Channels Role", "Highlight Channels", "ModMail Channel", "Social Media Channels", "Four Twenty Channels", "Banished Roles"]
 
 		gc = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('GameChannels')) if await self.cfg.get_channels('GameChannels') else 'None'
 		gr = ', '.join(f"<@&{r}>" for r in await self.cfg.get_roles('GameChannels')) if await self.cfg.get_roles('GameChannels') else 'None'
 		hc = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('HighlightChannels')) if await self.cfg.get_channels('HighlightChannels') else 'None'
-		ar = ', '.join(f"<@{r}>" for r in await self.cfg.get_auto_role_users('GameChannels')) if await self.cfg.get_auto_role_users('GameChannels') else 'None'
+		mmc = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('ModMailChannels')) if await self.cfg.get_channels('ModMailChannels') else 'None'
 		smf = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('SocialMediaChannels')) if await self.cfg.get_channels('SocialMediaChannels') else 'None'
 		ft = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('FourTwentyChannels')) if await self.cfg.get_channels('FourTwentyChannels') else 'None'
 		br = ', '.join(f"<@&{r}>" for r in await self.cfg.get_roles('BanishedRole')) if await self.cfg.get_roles('BanishedRole') else 'None'
 
-		values = [gc, gr, hc, ar, smf, ft, br]
+		values = [gc, gr, hc, mmc, smf, ft, br]
 
 		embed = await create_embed.create('Config', "Bot's settings", names, values, f"/getconfig")
 
@@ -630,7 +639,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!")
 
-	@commands.slash_command(guild_ids=[guild_id], name='timeout', description='Banish users. ADMIN ONLY!')
+	@commands.slash_command(guild_ids=[guild_id], name='timeout', description='Timeout users. ADMIN ONLY!')
 	@permissions.has_role("Admins")
 	async def timeout(self, ctx, user: Option(discord.Member, "Enter the user to timeout"), duration: Option(str, "Enter the duration"), reason: Option(str, "Enter the reason for the timeout") = 'None'):
 		self.log.info(f"{ctx.author} is timeouting {user.name}")
@@ -656,6 +665,12 @@ class Admins(commands.Cog):
 		await ctx.respond(f"{user} has been timed out for {length_str}")
 
 		await self.db.create_incident(str(user.id), reason, f"Timed out for {length_str}", timeouted_by, timeouted_at)
+
+	@timeout.error
+	async def timeout_error(self, ctx, error):
+		self.log.exception("Timeout error")
+
+		await ctx.respond("Oops, something went wrong!")
 
 
 def setup(bot):

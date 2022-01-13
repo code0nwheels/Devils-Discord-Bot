@@ -44,11 +44,13 @@ async def create_game(game, cmd):
 	utc2 = utctz.localize(utc)
 	est = utc2.astimezone(esttz)
 
+	epoch = int(est.timestamp())
+
 	if 'TBD' in game['status']['detailedState'] or game['status']['startTimeTBD']:
 		time = 'TBD'
 	else:
-		time = datetime.strftime(est,  "%-I:%M %p")
-	date = datetime.strftime(est,  "%B %-d, %Y")
+		time = f"<t:{epoch}:t>" #time = datetime.strftime(est,  "%-I:%M %p")
+	date = f"<t:{epoch}:D>" #date = datetime.strftime(est,  "%B %-d, %Y")
 
 	if away_id == 1:
 		teamlogo = re.sub(' ', '', home_team)

@@ -126,6 +126,7 @@ class GameChannel(object):
 				is_game, game_info = await hockey.next_game()
 				if not is_game:
 					self.log.info("No game. Sleeping until 3am.")
+					await self.bot.change_presence(activity = discord.Game('Golf'))
 					now = datetime.now()
 					to = (now + timedelta(days = 1)).replace(hour=3, minute=0, second=0)
 					#self.log.info(now, to)
@@ -141,6 +142,7 @@ class GameChannel(object):
 			utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
 			utc2 = utctz.localize(utc)
 			est = utc2.astimezone(esttz)
+			epoch = int(est.timestamp())
 
 			gmdt = datetime.strftime(est, "%Y-%m-%dT%H:%M:%S")
 			self.log.info(f"Next game is {away['abbreviation']} @ {home['abbreviation']} {gmdt}.")
@@ -150,8 +152,13 @@ class GameChannel(object):
 				if 'TBD' in game_info['status']['detailedState'] or game_info['status']['startTimeTBD']:
 					time = 'TBD'
 				else:
-					time = datetime.strftime(est,  "%-I:%M %p")
+					time = datetime.strftime(est,  "%-I:%M %p ET")
 				date = datetime.strftime(est,  "%-m/%-d")
+
+				if game_info['teams']['away']['team']['id'] != 1:
+					await self.bot.change_presence(activity = discord.Game(f"{away['abbreviation']} on {date} {time}"))
+				else:
+					await self.bot.change_presence(activity = discord.Game(f"{home['abbreviation']} on {date} {time}"))
 
 				worker_tasks = []
 				for channel_id in await self.cfg.get_channels('GameChannels'):
@@ -269,7 +276,10 @@ class GameChannel(object):
 					utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
 					utc2 = utctz.localize(utc)
 					est = utc2.astimezone(timezone('US/Eastern'))
-					time = datetime.strftime(est,  "%-I:%M %p on %B %-d, %Y")
+					#time = datetime.strftime(est,  "%-I:%M %p on %B %-d, %Y")
+
+					epoch = int(est.timestamp())
+					time = f"<t:{epoch}:t> on <t:{epoch}:D>"
 					if game_info['teams']['away']['team']['id'] == 1:
 						game_msg = f"at the **{game_info['teams']['home']['team']['name']}**"
 					else:
