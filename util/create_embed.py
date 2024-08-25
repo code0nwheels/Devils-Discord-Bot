@@ -14,39 +14,47 @@ from datetime import datetime, timedelta
 from tzlocal import get_localzone
 
 async def create_game(game, cmd):
-	away_id = game['teams']['away']['team']['id']
+	away_id = game['awayTeam']['id']
 	#team = await hockey.get_team(away_id)
-	away_team = game['teams']['away']['team']['name']#team['teamName']
-	#home_id = game['teams']['home']['team']['id']
+	away_team = await hockey.get_team(away_id)
+	home_id = game['homeTeam']['id']
 	#team = await hockey.get_team(home_id)
-	home_team = game['teams']['home']['team']['name']#team['teamName']
-	away_ot = game['teams']['away']['leagueRecord']['ot'] if 'ot' in game['teams']['away']['leagueRecord'] else 0
-	home_ot = game['teams']['home']['leagueRecord']['ot'] if 'ot' in game['teams']['home']['leagueRecord'] else 0
+	home_team = await hockey.get_team(home_id)
 
-	away_record = RECORD_TEMPLATE.format(game['teams']['away']['leagueRecord']['wins'], game['teams']['away']['leagueRecord']['losses'], away_ot)
-	home_record = RECORD_TEMPLATE.format(game['teams']['home']['leagueRecord']['wins'], game['teams']['home']['leagueRecord']['losses'], home_ot)
+	"""if game['gameType'] == 2:
+		away_wins, away_losses, away_ot = game['awayTeam']['record'].split('-')
+		home_wins, home_losses, home_ot = game['homeTeam']['record'].split('-')
 
-	if game['gameType'] == 'R':
-		away_pts = game['teams']['away']['leagueRecord']['wins'] * 2 + away_ot
-		home_pts = game['teams']['home']['leagueRecord']['wins'] * 2 + home_ot
+		away_record = RECORD_TEMPLATE.format(away_wins, away_losses, away_ot)
+		home_record = RECORD_TEMPLATE.format(home_wins, home_losses, home_ot)
+
+		away_pts = int(away_wins) * 2 + int(away_ot)
+		home_pts = int(home_wins) * 2 + int(home_ot)
 		away_record = f"{away_pts} PTS " + away_record
 		home_record = f"{home_pts} PTS " + home_record
+	else:"""
+	away_record = ""
+	home_record = ""
 
-	away_score = game['teams']['away']['score']
-	home_score = game['teams']['home']['score']
+	try:
+		away_score = game['awayTeam']['score']
+		home_score = game['homeTeam']['score']
+	except:
+		away_score = 0
+		home_score = 0
 
-	venue = game['venue']['name']
+	venue = game['venue']['default']
 
 	utctz = timezone('UTC')
 	esttz = timezone('US/Eastern')
-	time = game['gameDate']
+	time = game['startTimeUTC']
 	utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
 	utc2 = utctz.localize(utc)
 	est = utc2.astimezone(esttz)
 
 	epoch = int(est.timestamp())
 
-	if 'TBD' in game['status']['detailedState'] or game['status']['startTimeTBD']:
+	if 'TBD' in game['gameState']:
 		time = 'TBD'
 	else:
 		time = f"<t:{epoch}:t>" #time = datetime.strftime(est,  "%-I:%M %p")
@@ -57,17 +65,17 @@ async def create_game(game, cmd):
 	else:
 		teamlogo = re.sub(' ', '', away_team)
 
-	#teamlogo = teamlogo.replace('é', 'e')
+	teamlogo = teamlogo.replace('é', 'e')
 
 	embed = discord.Embed(title=date, color=0xff0000)
-	#file = discord.File(f"{IMAGES_NHL}Logos/{teamlogo}.png", filename=f"{teamlogo}.png")
-	embed.set_thumbnail(url=f"https://devsdiscord.com/images/NHL/Logos/{teamlogo}.png")
+	file = discord.File(f"{IMAGES_NHL}Logos/{teamlogo}.png", filename=f"{teamlogo}.png")
+	embed.set_thumbnail(url=f"attachment://{teamlogo}.png")
 	embed.add_field(name=away_team, value=away_record, inline=True)
 	#embed.add_field(name="\u200b", value="\u200b", inline=True)
 	embed.add_field(name=home_team, value=home_record, inline=True)
 	embed.add_field(name="Time", value=time, inline=False)
 	embed.add_field(name="Venue", value=venue, inline=True)
-	if game['status']['detailedState'] == 'Final':
+	if game['gameState'] in ["FINAL", "OFF"]:
 		if away_id == 1:
 			if away_score > home_score:
 				embed.add_field(name="Score", value=SCORE_TEMPLATE.format(away_score, home_score, 'W'), inline=True)
@@ -80,7 +88,7 @@ async def create_game(game, cmd):
 				embed.add_field(name="Score", value=SCORE_TEMPLATE.format(away_score, home_score, 'L'), inline=True)
 	embed.set_footer(text=cmd)
 
-	return embed
+	return file, embed
 
 async def no_game(date, cmd):
 	if not date:

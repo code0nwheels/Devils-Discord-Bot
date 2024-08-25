@@ -4,7 +4,7 @@ from discord.utils import get
 from util import create_embed, settings
 from hockey import hockey
 
-from discord.commands import Option
+from discord.commands import Option, permissions
 
 from datetime import datetime
 import dateparser
@@ -50,8 +50,8 @@ class Devils(commands.Cog):
 
 		if is_game:
 			try:
-				embed = await create_embed.create_game(game_info, "/game")
-				await ctx.respond(embed=embed)
+				file, embed = await create_embed.create_game(game_info, "/game")
+				await ctx.respond(file=file, embed=embed)
 			except Exception as e:
 				self.log.exception("Error with creating game")
 				await ctx.respond("Oops, something went wrong.")
@@ -75,21 +75,47 @@ class Devils(commands.Cog):
 		is_game, games = await hockey.get_next_x_games(x)
 
 		if is_game:
-			game_embeds = []
+			pages_ = []
 
 			for g in games:
-				game_embeds.append(await create_embed.create_game(g, ""))
+				file, embed = await create_embed.create_game(g, "/nextgame")
+				pages_.append(pages.Page(embeds=[embed,], files=[file,]))
 
-			paginator = pages.Paginator(pages=game_embeds, show_disabled=False, show_indicator=True, timeout=180)
-
-			paginator.customize_button("next", button_label=">", button_style=discord.ButtonStyle.green)
-			paginator.customize_button("prev", button_label="<", button_style=discord.ButtonStyle.green)
-			paginator.customize_button("first", button_label="<<", button_style=discord.ButtonStyle.red)
-			paginator.customize_button("last", button_label=">>", button_style=discord.ButtonStyle.red)
-
-			await paginator.respond(ctx, ephemeral=False)
+			paginator = pages.Paginator(
+				pages=pages_,
+				use_default_buttons=False,
+				loop_pages=False,
+				show_disabled=False,
+				author_check=False
+			)
+			paginator.add_button(
+				pages.PaginatorButton(
+					"first", label='<<', style=discord.ButtonStyle.red, loop_label="fst"
+				)
+			)
+			paginator.add_button(
+				pages.PaginatorButton(
+					"prev", label="<", style=discord.ButtonStyle.green, loop_label="prv"
+				)
+			)
+			paginator.add_button(
+				pages.PaginatorButton(
+					"page_indicator", style=discord.ButtonStyle.gray, disabled=True
+				)
+			)
+			paginator.add_button(
+				pages.PaginatorButton(
+					"next", label='>', style=discord.ButtonStyle.green, loop_label="nxt"
+				)
+			)
+			paginator.add_button(
+				pages.PaginatorButton(
+					"last", label='>>', style=discord.ButtonStyle.red, loop_label="lst"
+				)
+			)
+			await paginator.respond(ctx.interaction, ephemeral=False)
 		else:
-			file, embed = await create_embed.no_game(date, "/game")
+			file, embed = await create_embed.no_game('', "/nextgame")
 			await ctx.respond(file=file, embed=embed)
 
 
@@ -101,8 +127,8 @@ class Devils(commands.Cog):
 
 			if is_game:
 				try:
-					embed = await create_embed.create_game(game_info, "/nextgame")
-					await ctx.respond(embed=embed)
+					file, embed = await create_embed.create_game(game_info, "/nextgame")
+					await ctx.respond(embed=embed, file=file)
 				except Exception as e:
 					self.log.exception("Error with creating game")
 					await ctx.respond("Oops, something went wrong.")
@@ -143,8 +169,9 @@ class Devils(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong.")
 
-	@commands.slash_command(guild_ids=[guild_id], name='report', description='Report a message that breaks a rule anonymously.')
+	@commands.slash_command(guild_ids=[guild_id], name='report', description='Report a message that breaks a rule.')
 	async def report(self, ctx, message_link: Option(str, "Enter the message link in violation."), violation: Option(str, "Enter the violation.")):
+		self.log.info(f"{ctx.author} is reporting a message")
 		error_message = """Invalid link. Please try again.\
 
 **On Desktop:** Right click the message > Copy Message Link
@@ -171,27 +198,29 @@ class Devils(commands.Cog):
 		names = ["Violation", "Content", "URL"]
 		values = [violation, messageObj.content, f"[Click here to view]({message_link})"]
 
-		embed = await create_embed.create('Report', f"Message author: {messageObj.author} ({messageObj.author.id})", names, values, "")
+		embed = await create_embed.create('Report', f"Message author: {messageObj.author} ({messageObj.author.id})", names, values, f"Reported by {ctx.author} ({ctx.author.id})")
 
-		admin_role = get(ctx.guild.roles, name="Admins")
+		admin_role = get(ctx.guild.roles, id=348226061076791298)
 		await channel.send(admin_role.mention, embed=embed)
 
 		await ctx.respond("Thank you! I have notified the team.", ephemeral=True)
 
 	@report.error
 	async def report_error(self, ctx, error):
-		self.log.error("Error with the report command")
+		self.log.exception("Error with the report command")
 
 		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='openhelp', description='Talk with the Admins in a private channel.')
 	async def openhelp(self, ctx, brief_description: Option(str, "Enter a brief message of what you want to discuss.")):
+		self.log.info(f"{ctx.author} is opening a help thread")
+
 		modmail_chan_id = await self.cfg.get_channels("ModMailChannels")
 		modmail_chan = get(ctx.guild.text_channels, id=modmail_chan_id[0])
+
 		no_of_active_threads = len(modmail_chan.threads)
 		archived_threads = modmail_chan.archived_threads(private=True)
 		no_of_archived_threads = len(await archived_threads.flatten())
-		print(no_of_archived_threads)
 		no_of_threads = no_of_active_threads + no_of_archived_threads
 
 		for thread_ in modmail_chan.threads:
@@ -208,13 +237,13 @@ class Devils(commands.Cog):
 
 		embed = await create_embed.create(f'{ctx.author} ({ctx.author.id})', f"Needs help.", names, values, "")
 
-		admin_role = get(ctx.guild.roles, name="Admins")
+		admin_role = get(ctx.guild.roles, id=348226061076791298)
 		await thread.send(f"{ctx.author.mention} {admin_role.mention}", embed=embed)
 
 		await ctx.respond(f"Thank you! I have notified the team. Your thread is {thread.mention}", ephemeral=True)
 
 	@openhelp.error
-	async def openhelp_error( ctx, error):
+	async def openhelp_error(self, ctx, error):
 		self.log.error(f"Error with the openhelp command: {error}")
 
 		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)

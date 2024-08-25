@@ -1,23 +1,23 @@
+import os
 import discord
-from util import create_embed, settings
+from util import settings
 from discord.ext import commands
 
 from background.gamechannel import GameChannel
-from background.four_twenty import FourTwenty
-from background.home_game import HomeGame
 
 import logging
 from logging.handlers import RotatingFileHandler
+from dotenv import load_dotenv
 
-import os
+load_dotenv()
 
 intents = discord.Intents().default()
 intents.members = True
+intents.message_content = True
 client = commands.Bot(intents=intents)
 client.remove_command('help')
 client.owner_id = 364425223388528651
-with open('token', 'r') as f:
-	TOKEN = f.read().strip()
+TOKEN = os.getenv('DISCORD_API_KEY', '')
 cfg = settings.Settings()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -36,28 +36,35 @@ client.load_extension('cogs.devils')
 client.load_extension('cogs.reflex')
 client.load_extension('cogs.help')
 
-lockfile = "background/highlights.lock"
-if os.path.exists(lockfile):
-	os.remove(lockfile)
+ran = False
 
 @client.event
 async def on_ready():
-	log.info(f'client connected as {client.user}')
+	global ran
 
-	a = client.get_cog('Admins')
-	await a.setup_banished()
+	if not ran:
+		lock_file = 'lock'
+		if os.path.exists(lock_file):
+			os.remove(lock_file)
+			
+		log.info(f'client connected as {client.user}')
 
-	gc = GameChannel(client, cfg)
-	log.info("Starting GameChannel...")
-	client.loop.create_task(gc.run())
+		a = client.get_cog('Admins')
+		await a.setup_banished()
 
-	ft = FourTwenty(client, cfg)
-	log.info("Starting FourTwenty...")
-	client.loop.create_task(ft.run())
+		gc = GameChannel(client, cfg)
+		log.info("Starting GameChannel...")
+		client.loop.create_task(gc.run())
 
-	hg = HomeGame(client)
-	log.info("Starting HomeGame...")
-	client.loop.create_task(hg.run())
+		"""ft = FourTwenty(client, cfg)
+		log.info("Starting FourTwenty...")
+		client.loop.create_task(ft.run())"""
+
+		"""hg = HomeGame(client)
+		log.info("Starting HomeGame...")
+		client.loop.create_task(hg.run())"""
+
+		ran = True
 
 """@client.command(name='reloadcog')
 @commands.is_owner()
@@ -85,5 +92,7 @@ async def unloadcog(ctx, cog):
 		await ctx.send(f"Unloaded {cog}")
 	except Exception as e:
 		await ctx.send(f"Could not unload {cog}: {e}")"""
-
-client.run(TOKEN)
+try:
+	client.run(TOKEN)
+except Exception:
+	log.exception('uh oh')
