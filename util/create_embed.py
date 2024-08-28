@@ -1,82 +1,59 @@
 import discord
-import re
-import os
 
-from hockey import hockey
+from hockey.game import Game
 
-RECORD_TEMPLATE = "{}-{}-{}"
 SCORE_TEMPLATE = "{}-{} {}"
 IMAGES_NHL = "images/NHL/"
 IMAGES_ICONS = "images/icons/"
 
 from pytz import timezone
-from datetime import datetime, timedelta
+from datetime import datetime
 from tzlocal import get_localzone
 
-async def create_game(game, cmd):
-	away_id = game['awayTeam']['id']
-	#team = await hockey.get_team(away_id)
-	away_team = await hockey.get_team(away_id)
-	home_id = game['homeTeam']['id']
-	#team = await hockey.get_team(home_id)
-	home_team = await hockey.get_team(home_id)
+async def create_game(game: Game, cmd: str):
+	away_team_obj = await game.get_away_team()
+	home_team_obj = await game.get_home_team()
+	away_team = away_team_obj.full_name
+	home_team = home_team_obj.full_name
 
-	"""if game['gameType'] == 2:
-		away_wins, away_losses, away_ot = game['awayTeam']['record'].split('-')
-		home_wins, home_losses, home_ot = game['homeTeam']['record'].split('-')
+	away_record = game.away_team_record
+	home_record = game.home_team_record
 
-		away_record = RECORD_TEMPLATE.format(away_wins, away_losses, away_ot)
-		home_record = RECORD_TEMPLATE.format(home_wins, home_losses, home_ot)
+	away_score = game.away_score
+	home_score = game.home_score
 
-		away_pts = int(away_wins) * 2 + int(away_ot)
-		home_pts = int(home_wins) * 2 + int(home_ot)
-		away_record = f"{away_pts} PTS " + away_record
-		home_record = f"{home_pts} PTS " + home_record
-	else:"""
-	away_record = ""
-	home_record = ""
+	venue = game.venue
 
-	try:
-		away_score = game['awayTeam']['score']
-		home_score = game['homeTeam']['score']
-	except:
-		away_score = 0
-		home_score = 0
+	game_time = game.game_time("%-I:%M %p")
+	game_date = game.game_time("%B %-d, %Y")
+	game_time_obj = datetime.strptime(game_time, "%I:%M %p")
+	game_date_obj = datetime.strptime(game_date, "%B %d, %Y")
 
-	venue = game['venue']['default']
+	game_time_epoch = int(game_time_obj.timestamp())
+	game_date_epoch = int(game_date_obj.timestamp())
 
-	utctz = timezone('UTC')
-	esttz = timezone('US/Eastern')
-	time = game['startTimeUTC']
-	utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
-	utc2 = utctz.localize(utc)
-	est = utc2.astimezone(esttz)
-
-	epoch = int(est.timestamp())
-
-	if 'TBD' in game['gameState']:
+	if game.is_tbd:
 		time = 'TBD'
 	else:
-		time = f"<t:{epoch}:t>" #time = datetime.strftime(est,  "%-I:%M %p")
-	date = f"<t:{epoch}:D>" #date = datetime.strftime(est,  "%B %-d, %Y")
+		time = f"<t:{game_time_epoch}:t>" #time = datetime.strftime(est,  "%-I:%M %p")
+	game_date = f"<t:{game_date_epoch}:D>"
 
-	if away_id == 1:
-		teamlogo = re.sub(' ', '', home_team)
+	if away_team_obj.id == 1:
+		team_file = home_team_obj.get_team_logo()
 	else:
-		teamlogo = re.sub(' ', '', away_team)
+		team_file = away_team_obj.get_team_logo()
 
-	teamlogo = teamlogo.replace('é', 'e')
+	team_file_name = team_file.filename
 
-	embed = discord.Embed(title=date, color=0xff0000)
-	file = discord.File(f"{IMAGES_NHL}Logos/{teamlogo}.png", filename=f"{teamlogo}.png")
-	embed.set_thumbnail(url=f"attachment://{teamlogo}.png")
+	embed = discord.Embed(title=game_date, color=0xff0000)
+	embed.set_thumbnail(url=f"attachment://{team_file_name}")
 	embed.add_field(name=away_team, value=away_record, inline=True)
 	#embed.add_field(name="\u200b", value="\u200b", inline=True)
 	embed.add_field(name=home_team, value=home_record, inline=True)
 	embed.add_field(name="Time", value=time, inline=False)
 	embed.add_field(name="Venue", value=venue, inline=True)
-	if game['gameState'] in ["FINAL", "OFF"]:
-		if away_id == 1:
+	if game.is_final:
+		if game.get_away_team.id == 1:
 			if away_score > home_score:
 				embed.add_field(name="Score", value=SCORE_TEMPLATE.format(away_score, home_score, 'W'), inline=True)
 			else:
@@ -88,7 +65,7 @@ async def create_game(game, cmd):
 				embed.add_field(name="Score", value=SCORE_TEMPLATE.format(away_score, home_score, 'L'), inline=True)
 	embed.set_footer(text=cmd)
 
-	return file, embed
+	return team_file, embed
 
 async def no_game(date, cmd):
 	if not date:

@@ -1,9 +1,16 @@
 import discord
+import os
 
 bot = discord.Bot()
 
-with open("../token", "r") as f:
-    token = f.read()
+from dotenv import load_dotenv
+
+load_dotenv("../.env")
+try:
+    token = os.getenv("DISCORD_API_KEY")
+except:
+    print("No token found. Please create a .env file with the token.")
+    exit()
 
 @bot.event
 async def on_ready():

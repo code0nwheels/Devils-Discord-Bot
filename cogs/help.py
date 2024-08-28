@@ -2,11 +2,15 @@ import discord
 from discord.ext import commands, pages
 from util import create_embed
 
+import os
+
 import logging
 from logging.handlers import RotatingFileHandler
 
-with open('gid') as f:
-	guild_id = int(f.read().strip())
+from dotenv import load_dotenv
+
+load_dotenv()
+guild_id = int(os.getenv('GUILD_ID'))
 
 class Help(commands.Cog):
 	def __init__(self, bot):
@@ -84,7 +88,7 @@ class Help(commands.Cog):
 	@help.error
 	async def help_error(self, ctx, error):
 		self.log.exception("Error")
-		await ctx.respond("Oops, something went wrong!")
+		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 def setup(bot):
 	bot.add_cog(Help(bot))

@@ -1,10 +1,18 @@
 import discord
-from datetime import datetime
-import requests
+import os
 
-# get token from file
-with open('../token', 'r') as f:
-    token = f.read()
+from hockey.schedule import Schedule
+
+from util import settings
+
+from dotenv import load_dotenv
+
+load_dotenv("../.env")
+try:
+    token = os.getenv("DISCORD_API_KEY")
+except:
+    print("No token found. Please create a .env file with the token.")
+    exit()
 
 class HomeGame(object):
     """docstring for HomeGame."""
@@ -12,38 +20,29 @@ class HomeGame(object):
     def __init__(self, bot):
         super(HomeGame, self).__init__()
         self.bot = bot
+        self.cfg = settings.Settings()
 
     async def post(self):
         try:
-            # get nj devils game for today from api
-            # get current date and format to yyyy-mm-dd
-            today = datetime.now().strftime('%Y-%m-%d')
-
-            # get game data from api
-            url = f'https://api-web.nhle.com/v1/scoreboard/njd/now'
-            r = requests.get(url)
+            schedule = Schedule()
+            await schedule.fetch_team_schedule("njd")
 
             # get game data
-            try:
-                for date in r.json()['gamesByDate']:
-                    if date['date'] != today:
-                        continue
-                    for game in date['games']:
-                        if game['gameState'] in ('FUT', 'PRE', 'LIVE'):
-                            game_info = game
-                            break
-            except:
-                return
+            game = await schedule.get_next_game()
             
 
-            home = game_info['homeTeam']['id']
+            home = await game.get_home_team()
 
-            if home != 1:
+            if home.id != 1:
                 return # game is not at home
             else:
-                away_team = game_info['awayTeam']['name']['default']
-                meetup_channel = self.bot.get_channel(879491007538921532)
-                message = await meetup_channel.send(f"Who's going to today's game against {away_team}? React with <:njd:562468864835846187>")
+                if self.cfg.get("MeetupChannels") is None:
+                    return
+                
+                away_team = await game.get_away_team()
+                
+                meetup_channel = self.bot.get_channel(self.cfg.get("MeetupChannels")[0])
+                message = await meetup_channel.send(f"Who's going to today's game against {away_team.full_name}? React with <:njd:562468864835846187>")
                 await message.add_reaction("<:njd:562468864835846187>")
         except Exception as e:
             print(e)

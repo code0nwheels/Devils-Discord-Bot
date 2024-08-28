@@ -2,20 +2,23 @@ import discord
 from discord.ext import commands, pages
 from discord.utils import get
 from util import create_embed, settings
-from hockey import hockey
+from hockey.schedule import Schedule
 
-from discord.commands import Option, permissions
+from discord.commands import Option
 
 from datetime import datetime
 import dateparser
 
 import aiofiles
+import os
 
 import logging
 from logging.handlers import RotatingFileHandler
 
-with open('gid') as f:
-	guild_id = int(f.read().strip())
+from dotenv import load_dotenv
+
+load_dotenv()
+guild_id = int(os.getenv('GUILD_ID'))
 
 class Devils(commands.Cog):
 	def __init__(self, bot):
@@ -44,13 +47,15 @@ class Devils(commands.Cog):
 				await ctx.respond("Unrecognized date format")
 				return
 		else:
-			date = None
+			date = datetime.strftime(datetime.now(), "%Y-%m-%d")
 
-		is_game, game_info = await hockey.get_game(None, date)
+		schedule = Schedule(date)
+		await schedule.fetch_team_schedule("njd")
+		game = await schedule.get_game()
 
-		if is_game:
+		if game:
 			try:
-				file, embed = await create_embed.create_game(game_info, "/game")
+				file, embed = await create_embed.create_game(game, "/game")
 				await ctx.respond(file=file, embed=embed)
 			except Exception as e:
 				self.log.exception("Error with creating game")
@@ -69,12 +74,13 @@ class Devils(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong.")
 
-	async def get_x_games(self, ctx, x):
+	async def get_x_games(self, ctx, x, games):
 		self.log.info(f"{ctx.author} is getting next {x} games...")
 
-		is_game, games = await hockey.get_next_x_games(x)
+		if len(games) > 0:
+			if len(games) > x:
+				games = games[:x]
 
-		if is_game:
 			pages_ = []
 
 			for g in games:
@@ -121,11 +127,19 @@ class Devils(commands.Cog):
 
 	@commands.slash_command(guild_ids=[guild_id], name='nextgame', description='Gets the next upcoming game.')
 	async def nextgame(self, ctx, games: Option(int, "Enter how many games in the future you want.", required=False) = None):
-		if not games:
-			self.log.info(f"{ctx.author} is getting the next upcoming game")
-			is_game, game_info = await hockey.next_game()
+		self.log.info(f"{ctx.author} is getting the next upcoming game")
+		await ctx.defer()
+		if games:
+			num_games = games
+		else:
+			num_games = 1
 
-			if is_game:
+		schedule = Schedule()
+		await schedule.fetch_team_schedule("njd")
+
+		if num_games == 1:
+			game_info = await schedule.get_next_game()
+			if game_info:
 				try:
 					file, embed = await create_embed.create_game(game_info, "/nextgame")
 					await ctx.respond(embed=embed, file=file)
@@ -133,9 +147,34 @@ class Devils(commands.Cog):
 					self.log.exception("Error with creating game")
 					await ctx.respond("Oops, something went wrong.")
 			else:
-				await ctx.respond(':(')
+				try:
+					file, embed = await create_embed.no_game('', "/nextgame")
+					await ctx.respond(embed=embed, file=file)
+				except Exception as e:
+					self.log.exception("Error with creating no_game")
+					await ctx.respond("Oops, something went wrong.")
 		else:
-			await self.get_x_games(ctx, games)
+			game_info = await schedule.get_schedule(num_games)
+
+			if game_info:
+				for g in game_info:
+					if g.game_state == "Final":
+						game_info.remove(g)
+					elif g.game_state == "Postponed":
+						game_info.remove(g)
+					elif g.game_state == "Canceled":
+						game_info.remove(g)
+					elif g.game_state == "Scheduled":
+						break
+
+				await self.get_x_games(ctx, num_games, game_info)
+			else:
+				try:
+					file, embed = await create_embed.no_game('', "/nextgame")
+					await ctx.respond(embed=embed, file=file)
+				except Exception as e:
+					self.log.exception("Error with creating no_game")
+					await ctx.respond("Oops, something went wrong.")
 
 	@nextgame.error
 	async def nextgame_error(self, ctx, error):

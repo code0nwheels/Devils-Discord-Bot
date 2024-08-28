@@ -10,6 +10,11 @@ from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 
 load_dotenv()
+try:
+	token = os.getenv("DISCORD_API_KEY")
+except:
+	print("No token found. Please create a .env file with the token.")
+	exit()
 
 intents = discord.Intents().default()
 intents.members = True
@@ -17,7 +22,6 @@ intents.message_content = True
 client = commands.Bot(intents=intents)
 client.remove_command('help')
 client.owner_id = 364425223388528651
-TOKEN = os.getenv('DISCORD_API_KEY', '')
 cfg = settings.Settings()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -49,8 +53,8 @@ async def on_ready():
 			
 		log.info(f'client connected as {client.user}')
 
-		a = client.get_cog('Admins')
-		await a.setup_banished()
+		"""a = client.get_cog('Admins')
+		await a.setup_banished()"""
 
 		gc = GameChannel(client, cfg)
 		log.info("Starting GameChannel...")
@@ -93,6 +97,6 @@ async def unloadcog(ctx, cog):
 	except Exception as e:
 		await ctx.send(f"Could not unload {cog}: {e}")"""
 try:
-	client.run(TOKEN)
+	client.run(token)
 except Exception:
 	log.exception('uh oh')
