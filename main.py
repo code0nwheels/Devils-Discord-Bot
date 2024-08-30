@@ -4,6 +4,7 @@ from util import settings
 from discord.ext import commands
 
 from background.gamechannel import GameChannel
+from database.database import Database
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -19,9 +20,9 @@ except:
 intents = discord.Intents().default()
 intents.members = True
 intents.message_content = True
-client = commands.Bot(intents=intents)
-client.remove_command('help')
-client.owner_id = 364425223388528651
+bot = commands.Bot(intents=intents)
+bot.remove_command('help')
+bot.owner_id = os.getenv("OWNER_ID")
 cfg = settings.Settings()
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -34,15 +35,19 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
-client.load_extension('sql.database')
-client.load_extension('cogs.admins')
-client.load_extension('cogs.devils')
-client.load_extension('cogs.reflex')
-client.load_extension('cogs.help')
+bot.load_extension('cogs.admins')
+bot.get_cog('Admins').set_db(Database())
+bot.load_extension('cogs.devils')
+bot.load_extension('cogs.reflex')
+bot.load_extension('cogs.help')
+bot.load_extension('cogs.four_twenty')
+bot.load_extension('cogs.home_game')
+bot.load_extension('cogs.shiny')
+bot.load_extension('cogs.game_channel')
 
 ran = False
 
-@client.event
+@bot.event
 async def on_ready():
 	global ran
 
@@ -51,14 +56,14 @@ async def on_ready():
 		if os.path.exists(lock_file):
 			os.remove(lock_file)
 			
-		log.info(f'client connected as {client.user}')
+		log.info(f'client connected as {bot.user}')
 
 		"""a = client.get_cog('Admins')
 		await a.setup_banished()"""
 
-		gc = GameChannel(client, cfg)
+		"""gc = GameChannel(bot, cfg)
 		log.info("Starting GameChannel...")
-		client.loop.create_task(gc.run())
+		bot.loop.create_task(gc.run())"""
 
 		"""ft = FourTwenty(client, cfg)
 		log.info("Starting FourTwenty...")
@@ -70,33 +75,33 @@ async def on_ready():
 
 		ran = True
 
-"""@client.command(name='reloadcog')
+@bot.slash_command(name='reloadcog')
 @commands.is_owner()
 async def reloadcog(ctx, cog):
 	try:
-		client.reload_extension(cog)
+		bot.reload_extension(cog)
 		await ctx.send(f"Reloaded {cog}")
 	except Exception as e:
 		await ctx.send(f"Could not reload {cog}: {e}")
 
-@client.command(name='loadcog')
+@bot.slash_command(name='loadcog')
 @commands.is_owner()
 async def loadcog(ctx, cog):
 	try:
-		client.load_extension(cog)
+		bot.load_extension(cog)
 		await ctx.send(f"Loaded {cog}")
 	except Exception as e:
 		await ctx.send(f"Could not load {cog}: {e}")
 
-@client.command(name='unloadcog')
+@bot.slash_command(name='unloadcog')
 @commands.is_owner()
 async def unloadcog(ctx, cog):
 	try:
-		client.unload_extension(cog)
+		bot.unload_extension(cog)
 		await ctx.send(f"Unloaded {cog}")
 	except Exception as e:
-		await ctx.send(f"Could not unload {cog}: {e}")"""
+		await ctx.send(f"Could not unload {cog}: {e}")
 try:
-	client.run(token)
+	bot.run(token)
 except Exception:
 	log.exception('uh oh')

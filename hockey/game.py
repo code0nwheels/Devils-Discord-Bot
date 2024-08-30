@@ -76,6 +76,62 @@ class Game:
         Get the home team information.
         """
         return await Team.init(self.game_object.get('homeTeam', {}).get('id'))
+    
+    @property
+    def away_team_abbr(self) -> str:
+        """
+        Get the away team's abbreviation.
+        """
+        return self.game_object.get('awayTeam', {}).get('abbrev', 'UNK')
+    
+    @property
+    def home_team_abbr(self) -> str:
+        """
+        Get the home team's abbreviation.
+        """
+        return self.game_object.get('homeTeam', {}).get('abbrev', 'UNK')
+
+    @property
+    def away_team_full_name(self) -> str:
+        """
+        Get the away team's full name.
+        """
+        return self.game_object.get('awayTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
+    
+    @property
+    def home_team_full_name(self) -> str:
+        """
+        Get the home team's full name.
+        """
+        return self.game_object.get('homeTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
+    
+    @property
+    def away_team_name(self) -> str:
+        """
+        Get the away team's name.
+        """
+        return self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
+    
+    @property
+    def home_team_name(self) -> str:
+        """
+        Get the home team's name.
+        """
+        return self.game_object.get('homeTeam', {}).get('name', {}).get("default", "Unknown")
+    
+    @property
+    def away_team_id(self) -> int:
+        """
+        Get the away team's ID.
+        """
+        return self.game_object.get('awayTeam', {}).get('id', 0)
+    
+    @property
+    def home_team_id(self) -> int:
+        """
+        Get the home team's ID.
+        """
+        return self.game_object.get('homeTeam', {}).get('id', 0)
 
     @property
     def game_state(self) -> str:

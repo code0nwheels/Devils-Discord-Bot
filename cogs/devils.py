@@ -4,12 +4,11 @@ from discord.utils import get
 from util import create_embed, settings
 from hockey.schedule import Schedule
 
-from discord.commands import Option
+from discord.commands import SlashCommandGroup
 
 from datetime import datetime
 import dateparser
 
-import aiofiles
 import os
 
 import logging
@@ -35,9 +34,12 @@ class Devils(commands.Cog):
 		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
+	
+	games_group = SlashCommandGroup(name="games", description="Commands related to games.")
 
-	@commands.slash_command(guild_ids=[guild_id], name='game', description='Gets game for a specific date. Defaults to today.')
-	async def game(self, ctx, date: Option(str, "Enter a date. Omit for today.", required=False) = None):
+	@games_group.command(guild_ids=[guild_id], name='game', description='Gets game for a specific date. Defaults to today.')
+	@discord.commands.option(name="date", description="Enter a date. Omit for today.", required=False)
+	async def game(self, ctx, date: str = None):
 		self.log.info(f"{ctx.author} is getting game for {str(date)}...")
 		if date:
 			try:
@@ -125,8 +127,9 @@ class Devils(commands.Cog):
 			await ctx.respond(file=file, embed=embed)
 
 
-	@commands.slash_command(guild_ids=[guild_id], name='nextgame', description='Gets the next upcoming game.')
-	async def nextgame(self, ctx, games: Option(int, "Enter how many games in the future you want.", required=False) = None):
+	@games_group.command(guild_ids=[guild_id], name='nextgame', description='Gets the next upcoming game. Can specify how many games in the future you want.')
+	@discord.commands.option(name="games", description="Enter how many games in the future you want.", required=False)
+	async def nextgame(self, ctx, games: int = None):
 		self.log.info(f"{ctx.author} is getting the next upcoming game")
 		await ctx.defer()
 		if games:
@@ -158,11 +161,7 @@ class Devils(commands.Cog):
 
 			if game_info:
 				for g in game_info:
-					if g.game_state == "Final":
-						game_info.remove(g)
-					elif g.game_state == "Postponed":
-						game_info.remove(g)
-					elif g.game_state == "Canceled":
+					if g.is_final or g.is_ppd or g.is_canceled:
 						game_info.remove(g)
 					elif g.game_state == "Scheduled":
 						break
@@ -182,34 +181,10 @@ class Devils(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong.")
 
-	@commands.slash_command(guild_ids=[guild_id], name='lines', description='Gets lines from Dailyfaceoff.')
-	async def lines(self, ctx):
-		self.log.info(f"{ctx.author} is getting lines")
-		async with aiofiles.open("lines.txt", mode='r') as f:
-			content = await f.read()
-
-		lines = content.split('\n===\n')
-
-		fwd_all_string = lines[0]
-		def_all_string = lines[1]
-		g_all_string = lines[2]
-		last_update = lines[3]
-
-		names = ["Forwards", "Defense", "Goalies"]
-		values = [fwd_all_string, def_all_string, g_all_string]
-
-		embed = await create_embed.create('Lines', "The current lineup on DailyFaceoff", names, values, f"/lines | Updated on {last_update}")
-
-		await ctx.respond(embed=embed)
-
-	@lines.error
-	async def lines_error(self, ctx, error):
-		self.log.exception("Error getting lines")
-
-		await ctx.respond("Oops, something went wrong.")
-
 	@commands.slash_command(guild_ids=[guild_id], name='report', description='Report a message that breaks a rule.')
-	async def report(self, ctx, message_link: Option(str, "Enter the message link in violation."), violation: Option(str, "Enter the violation.")):
+	@discord.commands.option(name="message_link", description="Enter the message link in violation.", required=True)
+	@discord.commands.option(name="violation", description="Enter the violation.", required=True)
+	async def report(self, ctx, message_link: str, violation: str):
 		self.log.info(f"{ctx.author} is reporting a message")
 		error_message = """Invalid link. Please try again.\
 
@@ -239,7 +214,7 @@ class Devils(commands.Cog):
 
 		embed = await create_embed.create('Report', f"Message author: {messageObj.author} ({messageObj.author.id})", names, values, f"Reported by {ctx.author} ({ctx.author.id})")
 
-		admin_role = get(ctx.guild.roles, id=348226061076791298)
+		admin_role = get(ctx.guild.roles, name="Admins")
 		await channel.send(admin_role.mention, embed=embed)
 
 		await ctx.respond("Thank you! I have notified the team.", ephemeral=True)
@@ -251,7 +226,8 @@ class Devils(commands.Cog):
 		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='openhelp', description='Talk with the Admins in a private channel.')
-	async def openhelp(self, ctx, brief_description: Option(str, "Enter a brief message of what you want to discuss.")):
+	@discord.commands.option(name="brief_description", description="Enter a brief message of what you want to discuss.", required=False)
+	async def openhelp(self, ctx, brief_description: str = None):
 		self.log.info(f"{ctx.author} is opening a help thread")
 
 		modmail_chan_id = await self.cfg.get_channels("ModMailChannels")
@@ -276,14 +252,14 @@ class Devils(commands.Cog):
 
 		embed = await create_embed.create(f'{ctx.author} ({ctx.author.id})', f"Needs help.", names, values, "")
 
-		admin_role = get(ctx.guild.roles, id=348226061076791298)
+		admin_role = get(ctx.guild.roles, name="Admins")
 		await thread.send(f"{ctx.author.mention} {admin_role.mention}", embed=embed)
 
 		await ctx.respond(f"Thank you! I have notified the team. Your thread is {thread.mention}", ephemeral=True)
 
 	@openhelp.error
 	async def openhelp_error(self, ctx, error):
-		self.log.error(f"Error with the openhelp command: {error}")
+		self.log.exception(f"Error with the openhelp command: {error}")
 
 		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
 

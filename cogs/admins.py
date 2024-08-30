@@ -2,8 +2,7 @@ import discord
 from discord.ext import commands, pages
 from util import create_embed, settings, parseduration, timer
 from discord.utils import get
-from discord.commands import SlashCommandGroup, Option
-from discord.enums import ChannelType
+from discord.commands import SlashCommandGroup
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -12,9 +11,11 @@ from datetime import datetime, timedelta
 import asyncio
 import os
 
-from discord.ext.commands import Bot, has_permissions
+from discord.ext.commands import Bot
 
 from dotenv import load_dotenv
+
+from database.database import Database
 
 BANISH_TIMERS = {}
 load_dotenv()
@@ -36,11 +37,13 @@ class Admins(commands.Cog):
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
 
-		self.db = self.bot.get_cog('Database')
+		self.db: Database = None
 	
-	settings_cmd = SlashCommandGroup(name='settings', description='Settings for the bot')
-	channel_settings = settings_cmd.create_subgroup(name='channel', description='Settings for channels')
+	settings_cmd = SlashCommandGroup(name='settings', description='Settings for the bot', checks=[commands.has_permissions(administrator=True)], default_member_permissions=discord.Permissions(administrator=True))
 
+	def set_db(self, db: Database):
+		self.db = db
+		
 	def cog_unload(self):
 		if self.loop is not None:
 			self.loop.close()
@@ -54,10 +57,10 @@ class Admins(commands.Cog):
 				unbanish_at = d[1]
 
 				if datetime.now() >= unbanish_at:
-					await self.unbanish_cb(user)
+					await self._unbanish_cb(user)
 				else:
 					total_banish_secs = (unbanish_at-datetime.now()).total_seconds()
-					timer_ = timer.Timer(total_banish_secs, self.unbanish_cb, user)
+					timer_ = timer.Timer(total_banish_secs, self._unbanish_cb, user)
 					BANISH_TIMERS[str(user.id)] = timer_
 
 	async def update_channel_setting(self, ctx, channel_id, action, channel):
@@ -173,7 +176,8 @@ class Admins(commands.Cog):
 				await ctx.respond('Error. Have my owner check logs.')
 
 	@commands.slash_command(guild_ids=[guild_id], name='open', description='Opens game chat.')
-	@has_permissions(administrator=True)
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
 	async def open(self, ctx):
 		self.log.info(f"{ctx.author} opened game channels")
 		worker_tasks = []
@@ -202,7 +206,8 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='close', description='Closes game chat.')
-	@has_permissions(administrator=True)
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
 	async def close(self, ctx):
 		self.log.info(f"{ctx.author} closed game channels")
 
@@ -231,103 +236,60 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	@settings_cmd.command(guild_ids=[guild_id], name='gamechatrole', description='Set or remove role(s) for game chat.')
-	@has_permissions(administrator=True)
-	async def gamechatrole(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), role: Option(discord.Role, "Enter the role the bot will edit permissions for to open/close game chat(s)")): # type: ignore
-		self.log.info(f"{ctx.author} is {action} roles: {str(role)}")
-		await self.update_role_setting(ctx, 'GameChannels', action, role)
+	@settings_cmd.command(guild_ids=[guild_id], name='role', description='Set or remove roles for various categories.')
+	@discord.commands.option('category', description='Select the category', choices=['gamechat', 'banished'])
+	@discord.commands.option('action', description='Choose the action', choices=['add', 'remove'])
+	@discord.commands.option('role', description='Enter the role to manage')
+	async def role(self, ctx, category: str, action: str, role: discord.Role):
+		role_map = {
+			'gamechat': 'GameChannels',
+			'banished': 'BanishedRole'
+		}
 
-	@gamechatrole.error
-	async def gamechatrole_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to gamechatrole")
+		setting_key = role_map.get(category)
+		if not setting_key:
+			await ctx.respond("Invalid category.")
+			return
 
+		self.log.info(f"{ctx.author} is {action} role for {category}: {str(role)}")
+		await self.update_role_setting(ctx, setting_key, action, role)
+
+	@role.error
+	async def role_error(self, ctx, error):
+		self.log.exception(f"{ctx.author} tried to set a role")
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	@settings_cmd.command(guild_ids=[guild_id], name='banishedrole', description='Set or remove role(s) for banished role.')
-	@has_permissions(administrator=True)
-	async def banishedrole(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), role: Option(discord.Role, "Enter the role the bot will give to banished users")):
-		self.log.info(f"{ctx.author} is {action} roles: {str(role)}")
-		await self.update_role_setting(ctx, 'BanishedRole', action, role)
+	@settings_cmd.command(guild_ids=[guild_id], name='channel', description='Set or remove channels for various categories.')
+	@discord.commands.option('category', description='Select the category', choices=['game', 'meetup', 'highlight', 'socialmedia', 'fourtwenty', 'modmail'])
+	@discord.commands.option('action', description='Choose the action', choices=['add', 'remove'])
+	@discord.commands.option('channel', description='Enter the channel to manage')
+	async def channel(self, ctx, category: str, action: str, channel: discord.TextChannel):
+		category_map = {
+			'game': 'GameChannels',
+			'meetup': 'MeetupChannels',
+			'highlight': 'HighlightChannels',
+			'socialmedia': 'SocialMediaChannels',
+			'fourtwenty': 'FourTwentyChannels',
+			'modmail': 'ModMailChannels'
+		}
 
-	@banishedrole.error
-	async def banishedrole_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to banishedrole")
+		setting_key = category_map.get(category)
+		if not setting_key:
+			await ctx.respond("Invalid category.")
+			return
 
+		self.log.info(f"{ctx.author} is {action} {category} channels: {str(channel)}")
+		await self.update_channel_setting(ctx, setting_key, action, channel)
+
+	@channel.error
+	async def channel_error(self, ctx, error):
+		self.log.exception(f"{ctx.author} tried to set a channel")
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	@channel_settings.command(guild_ids=[guild_id], name='gamechannel', description='Set or remove channel(s) for game chat.')
-	@has_permissions(administrator=True)
-	async def gamechannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for game chat")):
-		self.log.info(f"{ctx.author} is {action} game channels: {str(channel)}")
-		await self.update_channel_setting(ctx, 'GameChannels', action, channel)
-
-	@gamechannel.error
-	async def gamechannel_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to setgamechannel")
-
-		await ctx.respond("Oops, something went wrong!", ephemeral=True)
-	
-	@channel_settings.command(guild_ids=[guild_id], name='meetupchannel', description='Set or remove channel(s) for meetups.')
-	@has_permissions(administrator=True)
-	async def meetupchannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for game chat")):
-		self.log.info(f"{ctx.author} is {action} game channels: {str(channel)}")
-		await self.update_channel_setting(ctx, 'MeetupChannels', action, channel)
-
-	@meetupchannel.error
-	async def meetupchannel_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to setmeetupchannel")
-
-		await ctx.respond("Oops, something went wrong!", ephemeral=True)
-
-	@channel_settings.command(guild_ids=[guild_id], name='highlightchannel', description='Set or remove channel(s) for highlights.')
-	@has_permissions(administrator=True)
-	async def highlightchannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for highlights")):
-		self.log.info(f"{ctx.author} is {action} highlight channels: {str(channel)}")
-		await self.update_channel_setting(ctx, 'HighlightChannels', action, channel)
-
-	@highlightchannel.error
-	async def highlightchannel_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to highlightchannel")
-
-		await ctx.respond("Oops, something went wrong!", ephemeral=True)
-
-	@channel_settings.command(guild_ids=[guild_id], name='socialmediachannel', description='Set or remove channel(s) for socialmediachannels.')
-	@has_permissions(administrator=True)
-	async def socialmediachannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for social media")):
-		self.log.info(f"{ctx.author} is {action} socialmediachannel channels: {str(channel)}")
-		await self.update_channel_setting(ctx, 'SocialMediaChannels', action, channel)
-
-	@socialmediachannel.error
-	async def socialmediachannel_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to socialmediachannel")
-
-		await ctx.respond("Oops, something went wrong!", ephemeral=True)
-
-	@channel_settings.command(guild_ids=[guild_id], name='fourtwentychannel', description='Set or remove channel(s) for fourtwentychannels.')
-	@has_permissions(administrator=True)
-	async def fourtwentychannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for...you know")):
-		self.log.info(f"{ctx.author} is {action} fourtwentychannel channels: {str(channel)}")
-		await self.update_channel_setting(ctx, 'FourTwentyChannels', action, channel)
-
-	@fourtwentychannel.error
-	async def fourtwentychannel_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to fourtwentychannel")
-
-		await ctx.respond("Oops, something went wrong!", ephemeral=True)
-
-	@channel_settings.command(guild_ids=[guild_id], name='modmailchannel', description='Set or remove channel(s) for modmailchannels.')
-	@has_permissions(administrator=True)
-	async def modmailchannel(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), channel: Option(discord.TextChannel, "Enter the channel for ModMail")):
-		self.log.info(f"{ctx.author} is {action} modmailchannel channels: {str(channel)}")
-		await self.update_channel_setting(ctx, 'ModMailChannels', action, channel)
-
-	@modmailchannel.error
-	async def modmailchannel_error(self, ctx, error):
-		self.log.exception(f"{ctx.author} tried to modmailchannel")
-
-	@commands.slash_command(guild_ids=[guild_id], name='reactalert', description='Set or remove message(s) for reactalerts.')
-	@has_permissions(administrator=True)
-	async def reactalert(self, ctx, action: Option(str, "Choose the action", choices=['add', 'remove']), message: Option(str, "Enter the message ID for receiving react alerts")):
+	@settings_cmd.command(guild_ids=[guild_id], name='reactalert', description='Set or remove message(s) for reactalerts.')
+	@discord.commands.option('action', description='Choose the action', choices=['add', 'remove'])
+	@discord.commands.option('message', description='Enter the message ID for receiving react alerts')
+	async def reactalert(self, ctx, action: str, message: int):
 		self.log.info(f"{ctx.author} is {action} reactalert messages: {str(message)}")
 		await self.update_message_setting(ctx, 'ReactAlert', action, int(message))
 
@@ -369,8 +331,12 @@ class Admins(commands.Cog):
 		await ctx.respond(f"{user.name} has been stripped of a role called: {role.name}")
 
 	@commands.slash_command(guild_ids=[guild_id], name='role', description='Set role for users.')
-	@has_permissions(administrator=True)
-	async def role(self, ctx, role: Option(discord.Role, "Enter the role"), action: Option(str, "Choose the action", choices=['add', 'remove']), user: Option(discord.Member, "Enter the user")):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('role', description='Enter the role to give')
+	@discord.commands.option('action', description='Choose the action', choices=['add', 'remove'])
+	@discord.commands.option('user', description='Enter the user to give the role to')
+	async def role(self, ctx, role: discord.Role, action: str, user: discord.Member):
 		if action == 'add':
 			await self.setrole(ctx, role, user)
 		else:
@@ -383,7 +349,8 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='getconfig', description='Gets bot\'s settings.')
-	@has_permissions(administrator=True)
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
 	async def getconfig(self, ctx):
 		self.log.info(f"{ctx.author} is getting config")
 		names = ["Game Channels", "Game Channels Role", "Highlight Channels", "ModMail Channel", "Social Media Channels", "Four Twenty Channels", "Banished Roles"]
@@ -408,7 +375,7 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	async def unbanish_cb(self, user: discord.Member, ctx=None, reply=False):
+	async def _unbanish_cb(self, user: discord.Member, ctx=None, reply=False):
 		global BANISH_TIMERS
 		if not reply:
 			self.log.info(f"Bot is unbanishing {user}")
@@ -460,8 +427,12 @@ class Admins(commands.Cog):
 			timer_.cancel()
 
 	@commands.slash_command(guild_ids=[guild_id], name='banish', description='Banish users.')
-	@has_permissions(administrator=True)
-	async def banish(self, ctx, user: Option(discord.Member, "Enter the user to unbanish"), duration: Option(str, "Enter the user to unbanish"), reason: Option(str, "Enter the reason for the banish") = 'None'):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('user', description='Enter the user to banish')
+	@discord.commands.option('duration', description='Enter the duration')
+	@discord.commands.option('reason', description='Enter the reason for the banish', required=False)
+	async def banish(self, ctx, user: discord.Member, duration: str, reason: str = 'None'):
 		global BANISH_TIMERS
 
 		self.log.info(f"{ctx.author} is banishing {user.name}")
@@ -483,38 +454,34 @@ class Admins(commands.Cog):
 		unbanish_at = banished_at + timedelta(seconds=secs_to_add)
 		total_banish_secs = (unbanish_at-banished_at).total_seconds()
 
-		broles = []
-		for r in await self.cfg.get_roles('BanishedRole'):
-			broles.append(get(ctx.guild.roles, id=int(r)))
-
-		if nitro_role in user.roles:
-			broles.append(nitro_role)
-
-		await user.edit(roles=broles)
-
-		if nitro_role in user.roles:
-			vip_channel = get(ctx.guild.channels, name='vip-lounge')
-			await vip_channel.set_permissions(user, read_messages=False,
-															  send_messages=None)
-
-		timer_ = timer.Timer(total_banish_secs, self.unbanish_cb, user, ctx)
-
 		try:
 			is_banished, added_to_db = await self.db.create_banish(user_id, roles, banished_at, unbanish_at, reason, banished_by)
 			if is_banished:
 				await ctx.respond('User is already banished!')
-				timer_.cancel()
 				return
 			if added_to_db:
+				broles = []
+				for r in await self.cfg.get_roles('BanishedRole'):
+					broles.append(get(ctx.guild.roles, id=int(r)))
+
+				if nitro_role in user.roles:
+					broles.append(nitro_role)
+
+				await user.edit(roles=broles)
+
+				"""if nitro_role in user.roles:
+					vip_channel = get(ctx.guild.channels, name='vip-lounge')
+					await vip_channel.set_permissions(user, read_messages=False,
+																	send_messages=None)"""
+
+				timer_ = timer.Timer(total_banish_secs, self._unbanish_cb, user, ctx)
 				await ctx.respond(f"{user} banished for {length_str}")
 			else:
 				await ctx.respond("Could not insert into database. Banish cancelled.")
-				timer_.cancel()
 				return
 		except Exception as e:
 			self.log.exception('Error')
 			await ctx.respond("Could not insert into database. Banish cancelled.")
-			timer_.cancel()
 			return
 
 		BANISH_TIMERS[str(user.id)] = timer_
@@ -527,9 +494,11 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='unbanish', description='Unbanish users.')
-	@has_permissions(administrator=True)
-	async def unbanish(self, ctx, user: Option(discord.Member, "Enter the user to unbanish")):
-		await self.unbanish_cb(user, ctx, True)
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('user', description='Enter the user to unbanish')
+	async def unbanish(self, ctx, user: discord.Member):
+		await self._unbanish_cb(user, ctx, True)
 
 	@unbanish.error
 	async def unbanish_error(self, ctx, error):
@@ -538,7 +507,8 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='restart', description='Restarts the bot.')
-	@has_permissions(administrator=True)
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
 	async def restart(self, ctx):
 		self.log.info(f"{ctx.author} is restarting the bot")
 
@@ -551,9 +521,16 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	@commands.slash_command(guild_ids=[guild_id], name='csay', description='Send a message to a specific channel as the bot.')
-	@has_permissions(administrator=True)
-	async def csay(self, ctx, channel: Option(discord.TextChannel, "Enter the channel to send the message to", channel_types=[ChannelType.text, ChannelType.public_thread, ChannelType.private_thread]), message: Option(str, "Enter the message to send. If you want to send multiple lines, omit.", required=False)=None, attachment: Option(discord.Attachment, "Attach a file", required=False)=None):
+	@commands.slash_command(guild_ids=[guild_id], name='say', description='Send a message as the bot.')
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('message', description='Enter the message to send', required=False)
+	@discord.commands.option('channel', description='Enter the channel to send the message to', type=discord.TextChannel, required=False)
+	@discord.commands.option('attachment', description='Attach a file', required=False)
+	async def say(self, ctx, channel: discord.TextChannel = None, message: str = None, attachment: discord.Attachment = None):
+		if not channel:
+			channel = ctx.channel
+
 		self.log.info(f"{ctx.author} is sending a message to {channel.name}")
 		file = None
 
@@ -571,20 +548,22 @@ class Admins(commands.Cog):
 				await ctx.send("I don't have all day! Retry if you want.")
 				return
 			await channel.send(message.content, file=file)
-			await ctx.send("Sent!")
+			await ctx.send("Sent!", delete_after=3, ephemeral=True)
 		else:
 			await channel.send(message, file=file)
-			await ctx.respond("Sent!")
+			await ctx.respond("Sent!", delete_after=3, ephemeral=True)
 
-	@csay.error
-	async def csay_error(self, ctx, error):
+	@say.error
+	async def say_error(self, ctx, error):
 		self.log.exception(f"{ctx.author} tried to send a message")
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='editmsg', description='Edit a message the bot posted.')
-	@has_permissions(administrator=True)
-	async def editmsg(self, ctx, message_id: Option(str, "Enter the message ID (Shift+click Copy ID!) to edit")):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('message_id', description='Enter the message ID to edit')
+	async def editmsg(self, ctx, message_id: str):
 		messageObj = await commands.MessageConverter().convert(ctx, message_id)
 		self.log.info(f"{ctx.author} is editing message {messageObj.id}")
 
@@ -617,8 +596,12 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='reply', description='Reply to a message as the bot.')
-	@has_permissions(administrator=True)
-	async def reply(self, ctx, message_id: Option(str, "Enter the message ID to reply to"), message: Option(str, "Enter the message to send. If you want to send multiple lines, omit.", required=False)=None, attachment: Option(discord.Attachment, "Attach a file", required=False)=None):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('message_id', description='Enter the message ID to reply to')
+	@discord.commands.option('message', description='Enter the message to send', required=False)
+	@discord.commands.option('attachment', description='Attach a file', required=False)
+	async def reply(self, ctx, message_id: str, message: str = None, attachment: discord.Attachment = None):
 		messageObj = await commands.MessageConverter().convert(ctx, message_id)
 		self.log.info(f"{ctx.author} is replying to a message")
 		file = None
@@ -637,10 +620,10 @@ class Admins(commands.Cog):
 				await ctx.send("I don't have all day! Retry if you want.")
 				return
 			await messageObj.reply(message.content, file=file)
-			await ctx.send("Replied!")
+			await ctx.send("Replied!", delete_after=3, ephemeral=True)
 		else:
 			await messageObj.reply(message, file=file)
-			await ctx.respond("Replied!")
+			await ctx.respond("Replied!", delete_after=3, ephemeral=True)
 
 	@reply.error
 	async def reply_error(self, ctx, error):
@@ -649,7 +632,8 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='kill', description='Kills the bot.')
-	@has_permissions(administrator=True)
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
 	async def kill(self, ctx):
 		self.log.info(f"{ctx.author} is killing the bot")
 
@@ -663,8 +647,12 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='incident', description='Create an incident report.')
-	@has_permissions(administrator=True)
-	async def incident(self, ctx, user: Option(discord.Member,"Enter the user you want to create an incident report for"), description: Option(str, "Enter the description of the incident"), decision: Option(str, "Enter the decision of the incident")):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('user', description='Enter the user to create an incident report for')
+	@discord.commands.option('description', description='Enter the description of the incident')
+	@discord.commands.option('decision', description='Enter the decision of the incident')
+	async def incident(self, ctx, user: discord.Member, description: str, decision: str):
 		self.log.info(f"{ctx.author} is creating an incident report.")
 
 		reported_by = str(ctx.author.id)
@@ -682,9 +670,11 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name="getincident", description="Gets incident reports for the specified user")
-	@has_permissions(administrator=True)
-	async def getincident(self, ctx, user: Option(discord.Member, "Enter the user you want incident reports for", required=False),
-							user_id: Option(str, "Enter the user you want incident reports for", required=False)):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('user', description='Enter the user to get incident reports for', required=False)
+	@discord.commands.option('user_id', description='Enter the user to get incident reports for', required=False)
+	async def getincident(self, ctx, user: discord.Member = None, user_id: str = None):
 		if not user and not user_id:
 			ctx.respond("I can't read your mind! Enter a user.")
 			
@@ -743,8 +733,12 @@ class Admins(commands.Cog):
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='timeout', description='Timeout users.')
-	@has_permissions(administrator=True)
-	async def timeout(self, ctx, user: Option(discord.Member, "Enter the user to timeout"), duration: Option(str, "Enter the duration"), reason: Option(str, "Enter the reason for the timeout") = 'None'):
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('user', description='Enter the user to timeout')
+	@discord.commands.option('duration', description='Enter the duration')
+	@discord.commands.option('reason', description='Enter the reason for the timeout', required=False)
+	async def timeout(self, ctx, user: discord.Member, duration: str, reason: str = 'None'):
 		self.log.info(f"{ctx.author} is timeouting {user.name}")
 
 		try:
@@ -753,12 +747,7 @@ class Admins(commands.Cog):
 			self.log.exception('Error parsing duration')
 			await ctx.respond(f"Error timeouting: {e}")
 			return
-
-		nitro_role = get(ctx.guild.roles, name='Nitro Booster')
-
-		roles = ','.join([str(role.id) for role in user.roles if nitro_role != role])
-
-		user_id = str(user.id)
+		
 		timeouted_by = str(ctx.author.id)
 		timeouted_at = datetime.now()
 		untimeout_at = timedelta(seconds=secs_to_add)

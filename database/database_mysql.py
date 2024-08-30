@@ -1,13 +1,13 @@
 import aiomysql
-import asyncio
-from discord.ext import commands
+import os
 
 import logging
 from logging.handlers import RotatingFileHandler
 
-class Database(commands.Cog):
-	def __init__(self, bot):
-		self.bot = bot
+from dotenv import load_dotenv
+
+class Database:
+	def __init__(self):
 		self.pool = None
 		logging.basicConfig(level=logging.INFO)
 		self.log = logging.getLogger(__name__)
@@ -21,12 +21,12 @@ class Database(commands.Cog):
 		self.log.addHandler(handler)
 
 	async def login(self):
-		with open("db.txt") as f:
-			dbinfo = f.read().split('\n')
+		load_dotenv()
+		dbinfo = [os.getenv("DB_USER"), os.getenv("DB_PASSWORD"), os.getenv("DB_NAME")]
 
 		self.pool = await aiomysql.create_pool(host='127.0.0.1', port=3306,
 								user=dbinfo[0], password=dbinfo[1],
-								db=dbinfo[2], loop=self.bot.loop)
+								db=dbinfo[2])
 	async def query(self, statement, *values):
 		good = False
 		if self.pool is None:
@@ -74,7 +74,7 @@ class Database(commands.Cog):
 		return data
 
 	async def create_incident(self, user_id, description, decision, reported_by, reported_at):
-		sql = """INSERT INTO devils.incidents (user_id, description, decision, reported_by, reported_at)
+		sql = """INSERT INTO incidents (user_id, description, decision, reported_by, reported_at)
 		VALUES (%s, %s, %s, %s, %s);"""
 
 		return await self.query(sql, user_id, description, decision, reported_by, reported_at)
@@ -85,7 +85,7 @@ class Database(commands.Cog):
 		is_banished = await self.fetch(sql, user_id)
 
 		if not is_banished:
-			sql = """INSERT INTO devils.banished (user_id, roles, banished_at, unbanish_at, reason, is_banished, banished_by)
+			sql = """INSERT INTO banished (user_id, roles, banished_at, unbanish_at, reason, is_banished, banished_by)
 			VALUES (%s, %s, %s, %s, %s, 'Y', %s);"""
 
 			return False, await self.query(sql, user_id, roles, banished_at, unbanish_at, reason, banished_by)
@@ -100,7 +100,7 @@ class Database(commands.Cog):
 		if data:
 			banished_id = data[0][0]
 			roles = data[0][1]
-			sql = f"""UPDATE devils.banished SET is_banished='N', unbanished_by=%s, unbanish_at=%s
+			sql = f"""UPDATE banished SET is_banished='N', unbanished_by=%s, unbanish_at=%s
 			WHERE banished_id = {banished_id};"""
 
 			return False, await self.query(sql, unbanished_by, unbanished_at), roles
@@ -116,6 +116,3 @@ class Database(commands.Cog):
 		sql = "SELECT * FROM incidents WHERE user_id = %s ORDER BY reported_at DESC;"
 
 		return await self.fetch(sql, user_id)
-
-def setup(bot):
-	bot.add_cog(Database(bot))
