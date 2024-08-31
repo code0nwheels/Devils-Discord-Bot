@@ -108,6 +108,11 @@ async def help(category, commands):
 	return embed
 
 async def incident(incident_id, user_id, description, decision, reported_by, reported_at):
+	try:
+		reported_at = datetime.strptime(reported_at, "%Y-%m-%d %H:%M:%S")
+	except:
+		reported_at = datetime.strptime(reported_at, "%Y-%m-%d %H:%M:%S.%f")
+		
 	embed=discord.Embed(title=f"Incident #{incident_id}", description=f"<@{user_id}>")
 	embed.add_field(name="Description", value=description, inline=False)
 	embed.add_field(name="Decision", value=decision, inline=True)
