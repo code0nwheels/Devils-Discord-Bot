@@ -74,9 +74,9 @@ class GameChannel(commands.Cog):
             game_time_category = game.game_time("%-I:%M %p ET")
             game_date = game.game_time("%-m/%-d")
 
-            channel_category_name = f"{away_team_abbr} @ {home_team_abbr} {game_time_category}"
+            channel_category_name = f"{away_team_abbr} @ {home_team_abbr} {game_date} {game_time_category}"
             channel_description = f"{away_team_name} @ {home_team_name} {game_date}"
-            bot_status = f"{away_team_abbr} @ {home_team_abbr} {game_time_category}"
+            bot_status = f"{away_team_abbr} @ {home_team_abbr} {game_date} {game_time_category}"
         
         await self.bot.change_presence(activity=discord.Game(bot_status))
         self.log.info(f"Bot status updated to: {bot_status}")

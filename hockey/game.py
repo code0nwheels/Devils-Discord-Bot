@@ -64,6 +64,13 @@ class Game:
         Refresh the game data.
         """
         await self._fetch_game()
+    
+    @property
+    def season(self) -> str:
+        """
+        Get the season of the game.
+        """
+        return self.game_object.get('season', "Unknown")
 
     async def get_away_team(self) -> Team:
         """

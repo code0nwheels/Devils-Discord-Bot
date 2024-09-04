@@ -130,3 +130,29 @@ async def create(title, description, names, values, cmd, thumbnail=None):
 	embed.set_footer(text=cmd)
 
 	return embed
+
+# Create a leaderboard embed
+# Args: ranks - a dict containing the records of the users, keys are user IDs, values are list of wins, losses, win%, rank number
+#       updated_at - a string containing the time the leaderboard was last updated
+# footer: Last updated at <updated_at>
+# omit embed field names 
+async def create_leaderboard(ranks: dict, updated_at: str):
+	ranks_str = ""
+	embed = discord.Embed(color=0xff0000)
+	embed.set_footer(text=f"Last updated at {updated_at}")
+	for user_id, record in ranks.items():
+		ranks_str += f"{record[3]}. <@{user_id}> {record[0]}-{record[1]} ({round(record[2]*100, 3)}%)\n"
+		#embed.add_field(name="\u200b", value=f"{record[3]}. <@{user_id}> {record[0]}-{record[1]} ({round(record[2]*100, 3)}%)", inline=False)
+	embed.description = ranks_str.strip()
+	return embed
+
+# Create a user picks embed
+async def create_user_picks_embed(user: str, picks: list, date: str):
+	embed = discord.Embed(title=f"{user}'s Picks for {date}", color=0xff0000)
+	picks_str = ""
+
+	for i, pick in enumerate(picks):
+		picks_str += f"{i+1}. {pick}\n"
+	
+	embed.description = picks_str.strip()
+	return embed

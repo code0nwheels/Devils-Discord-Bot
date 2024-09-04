@@ -44,6 +44,7 @@ bot.load_extension('cogs.four_twenty')
 bot.load_extension('cogs.home_game')
 bot.load_extension('cogs.shiny')
 bot.load_extension('cogs.game_channel')
+bot.load_extension('cogs.pickems', recursive=True)
 
 ran = False
 
@@ -75,32 +76,6 @@ async def on_ready():
 
 		ran = True
 
-@bot.slash_command(name='reloadcog')
-@commands.is_owner()
-async def reloadcog(ctx, cog):
-	try:
-		bot.reload_extension(cog)
-		await ctx.send(f"Reloaded {cog}")
-	except Exception as e:
-		await ctx.send(f"Could not reload {cog}: {e}")
-
-@bot.slash_command(name='loadcog')
-@commands.is_owner()
-async def loadcog(ctx, cog):
-	try:
-		bot.load_extension(cog)
-		await ctx.send(f"Loaded {cog}")
-	except Exception as e:
-		await ctx.send(f"Could not load {cog}: {e}")
-
-@bot.slash_command(name='unloadcog')
-@commands.is_owner()
-async def unloadcog(ctx, cog):
-	try:
-		bot.unload_extension(cog)
-		await ctx.send(f"Unloaded {cog}")
-	except Exception as e:
-		await ctx.send(f"Could not unload {cog}: {e}")
 try:
 	bot.run(token)
 except Exception:

@@ -763,7 +763,67 @@ class Admins(commands.Cog):
 		self.log.exception("Timeout error")
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
+	
+	@commands.slash_command(guild_ids=[guild_id], name='loadcog', description='Load a cog.')
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('cog', description='Enter the cog to load')
+	async def loadcog(self, ctx, cog: str):
+		self.log.info(f"{ctx.author} is loading cog {cog}")
+
+		try:
+			self.bot.load_extension(f'cogs.{cog}')
+			await ctx.respond(f"Cog {cog} loaded!")
+		except Exception as e:
+			self.log.exception("Error loading cog")
+			await ctx.respond(f"Error loading cog: {e}")
+
+	@loadcog.error
+	async def loadcog_error(self, ctx, error):
+		self.log.exception("Load cog error")
+
+		await ctx.respond("Oops, something went wrong!", ephemeral=True)
+
+	@commands.slash_command(guild_ids=[guild_id], name='unloadcog', description='Unload a cog.')
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('cog', description='Enter the cog to unload')
+	async def unloadcog(self, ctx, cog: str):
+		self.log.info(f"{ctx.author} is unloading cog {cog}")
+
+		try:
+			self.bot.unload_extension(f'cogs.{cog}')
+			await ctx.respond(f"Cog {cog} unloaded!")
+		except Exception as e:
+			self.log.exception("Error unloading cog")
+			await ctx.respond(f"Error unloading cog: {e}")
+
+	@unloadcog.error
+	async def unloadcog_error(self, ctx, error):
+		self.log.exception("Unload cog error")
+
+		await ctx.respond("Oops, something went wrong!", ephemeral=True)
+	
+	@commands.slash_command(guild_ids=[guild_id], name='reloadcog', description='Reload a cog.')
+	@commands.has_permissions(administrator=True)
+	@discord.default_permissions(administrator=True)
+	@discord.commands.option('cog', description='Enter the cog to reload')
+	async def reloadcog(self, ctx, cog: str):
+		self.log.info(f"{ctx.author} is reloading cog {cog}")
+
+		try:
+			self.bot.reload_extension(f'cogs.{cog}')
+			await ctx.respond(f"Cog {cog} reloaded!")
+		except Exception as e:
+			self.log.exception("Error reloading cog")
+			await ctx.respond(f"Error reloading cog: {e}")
+
+	@reloadcog.error
+	async def reloadcog_error(self, ctx, error):
+		self.log.exception("Reload cog error")
+
+		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
 
-def setup(bot):
+def setup(bot: Bot):
 	bot.add_cog(Admins(bot))

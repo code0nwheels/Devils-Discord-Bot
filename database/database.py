@@ -18,7 +18,7 @@ class Database:
 
     async def login(self):
         load_dotenv()
-        dbinfo = os.getenv("DB_NAME")
+        dbinfo = "database/" + os.getenv("DB_NAME")
 
         self.conn = await aiosqlite.connect(dbinfo)
         await self.conn.execute("PRAGMA foreign_keys = ON;")  # Enable foreign key support
