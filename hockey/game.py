@@ -35,10 +35,11 @@ class Game:
         """
         Initialize the Game object with a game ID.
         """
-        print("game_id", game_id)
         self.game = None
         self.game_id = game_id
         self.game_object: Dict[str, Any] = {}
+
+        self.round = 0
     
     @classmethod
     async def init(cls, game_id: int):
@@ -387,15 +388,30 @@ class Game:
         """
         return self.game_object.get('periodDescriptor', {}).get('number', 0) > 3
     
-    @property
-    def winning_team(self) -> Team:
+    async def winning_team(self) -> Team:
         """
         Get the winning team.
         """
         if self.away_score > self.home_score:
-            return self.get_away_team()
+            return await self.get_away_team()
         else:
-            return self.get_home_team()
+            return await self.get_home_team()
+    
+    @property
+    def winning_team_id(self) -> int:
+        """
+        Get the winning team's ID.
+        """
+        if self.away_score > self.home_score:
+            return self.away_team_id
+        else:
+            return self.home_team_id
+        
+    def set_round(self, round: int) -> None:
+        """
+        Set the round of the game.
+        """
+        self.round = round
     
     def __eq__(self, value: object) -> bool:
         """

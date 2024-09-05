@@ -80,10 +80,20 @@ class Schedule:
         for game in self.schedule:
             if team_id:
                 if game['awayTeam']['id'] == team_id or game['homeTeam']['id'] == team_id:
-                    return await Game.init(game['id'])
+                    if game['gameType'] != 3:
+                        return await Game.init(game['id'])
+                    else:
+                        _game = await Game.init(game['id'])
+                        _game.set_round(game['seriesStatus'])['round']
+                        return _game
             else:
                 if game['gameDate'] == self.date:
-                    return await Game.init(game['id'])
+                    if game['gameType'] != 3:
+                        return await Game.init(game['id'])
+                    else:
+                        _game = await Game.init(game['id'])
+                        _game.set_round(game['seriesStatus'])['round']
+                        return _game
         return None
 
     async def get_game_by_id(self, game_id: int) -> Optional[Game]:
@@ -92,7 +102,12 @@ class Schedule:
         """
         for game in self.schedule:
             if game['id'] == game_id:
-                return await Game.init(game['id'])
+                if game['gameType'] != 3:
+                    return await Game.init(game['id'])
+                else:
+                    _game = await Game.init(game['id'])
+                    _game.set_round(game['seriesStatus'])['round']
+                    return _game
         return None
     
     async def get_next_game(self) -> Optional[Game]:
@@ -101,5 +116,10 @@ class Schedule:
         """
         for game in self.schedule:
             if game['gameDate'] > self.date or game['gameState'] in ['FUT', 'PRE']:
-                return await Game.init(game['id'])
+                if game['gameType'] != 3:
+                    return await Game.init(game['id'])
+                else:
+                    _game = await Game.init(game['id'])
+                    _game.set_round(game['seriesStatus'])['round']
+                    return _game
         return None

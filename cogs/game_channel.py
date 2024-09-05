@@ -4,6 +4,7 @@ from util import settings
 
 import discord
 from discord.ext import commands, tasks
+from discord.utils import get
 
 import logging
 from logging.handlers import RotatingFileHandler
@@ -118,12 +119,58 @@ class GameChannel(commands.Cog):
         closing_message = ""
 
         if next_game:
-            next_game_datetime = next_game.raw_game_time.timestamp()
-            next_game_date = f"<t:{next_game_datetime}:D>"
-            next_game_time = f"<t:{next_game_datetime}:T>"
-            closing_message = f"Game chat is now closed. Next game is **{next_game.away_team_abbr} @ {next_game.home_team_abbr}** on **{next_game_date}** at **{next_game_time}**!"
+            if cur_game.is_playoffs:
+                winning_team = cur_game.winning_team_id
+                if winning_team == 1:
+                    if cur_game.home_team_id == 1:
+                        if cur_game.home_team_wins + 1 >= 4:
+                            if cur_game.round >= 4:
+                                closing_message = "Game chat is now closed. We did it!"
+                            else:
+                                closing_message = "Game chat is now closed. See you next round!"
+                    else:
+                        if cur_game.away_team_wins + 1 >= 4:
+                            if cur_game.round >= 4:
+                                closing_message = "Game chat is now closed. We did it!"
+                            else:
+                                closing_message = "Game chat is now closed. See you next round!"
+                else:
+                    if cur_game.home_team_id == 1:
+                        if cur_game.away_team_wins + 1 >= 4:
+                            closing_message = "Game chat is now closed. Better luck next time!"
+                    else:
+                        if cur_game.home_team_wins + 1 >= 4:
+                            closing_message = "Game chat is now closed. Better luck next time!"
+            if not closing_message:
+                next_game_datetime = next_game.raw_game_time.timestamp()
+                next_game_date = f"<t:{next_game_datetime}:D>"
+                next_game_time = f"<t:{next_game_datetime}:T>"
+                closing_message = f"Game chat is now closed. Next game is **{next_game.away_team_abbr} @ {next_game.home_team_abbr}** on **{next_game_date}** at **{next_game_time}**!"
         else:
-            closing_message = "Game chat is now closed. Enjoy the offseason!"
+            if cur_game.is_playoffs:
+                winning_team = cur_game.winning_team_id
+                if winning_team == 1:
+                    if cur_game.home_team_id == 1:
+                        if cur_game.home_team_wins + 1 >= 4:
+                            if cur_game.round >= 4:
+                                closing_message = "Game chat is now closed. We did it!"
+                            else:
+                                closing_message = "Game chat is now closed. See you next round!"
+                    else:
+                        if cur_game.away_team_wins + 1 >= 4:
+                            if cur_game.round >= 4:
+                                closing_message = "Game chat is now closed. We did it!"
+                            else:
+                                closing_message = "Game chat is now closed. See you next round!"
+                else:
+                    if cur_game.home_team_id == 1:
+                        if cur_game.away_team_wins + 1 >= 4:
+                            closing_message = "Game chat is now closed. Better luck next time!"
+                    else:
+                        if cur_game.home_team_wins + 1 >= 4:
+                            closing_message = "Game chat is now closed. Better luck next time!"
+            else:
+                closing_message = "Game chat is now closed. Enjoy the offseason!"
 
         for channel in channels:
             for role in roles:
@@ -189,7 +236,8 @@ class GameChannel(commands.Cog):
         role_ids = await self.cfg.get_roles("GameChannels")
 
         for role_id in role_ids:
-            roles.append(self.bot.get_role(role_id))
+            role = get(self.bot.guilds[0].roles, id=role_id)
+            roles.append(role)
 
         self.log.info(f"Retrieved {len(roles)} roles for game communication.")
         return roles
