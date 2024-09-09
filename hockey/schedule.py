@@ -123,3 +123,18 @@ class Schedule:
                     _game.set_round(game['seriesStatus'])['round']
                     return _game
         return None
+    
+    async def get_next_time_playing_opponent(self, team_id: int) -> Optional[Game]:
+        """
+        Get the next time playing opponent.
+        """
+        for game in self.schedule:
+            if game['awayTeam']['id'] == team_id or game['homeTeam']['id'] == team_id:
+                if game['gameDate'] > self.date or game['gameState'] in ['FUT', 'PRE']:
+                    if game['gameType'] != 3:
+                        return await Game.init(game['id'])
+                    else:
+                        _game = await Game.init(game['id'])
+                        _game.set_round(game['seriesStatus'])['round']
+                        return _game
+        return None

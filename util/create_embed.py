@@ -67,17 +67,19 @@ async def create_game(game: Game, cmd: str):
 
 	return team_file, embed
 
-async def no_game(date, cmd):
-	if not date:
+async def no_game(date, cmd, no_date=False):
+	if not date and not no_date:
 		localtz = get_localzone()
 		esttz = timezone('US/Eastern')
 
 		curdt = localtz.localize(datetime.now())
 		est = curdt.astimezone(esttz)
+		date = datetime.strftime(est,  "%B %-d, %Y")
+	elif no_date:
+		date = "No game"
 	else:
 		est = datetime.strptime(date, "%Y-%m-%d")
-
-	date = datetime.strftime(est,  "%B %-d, %Y")
+		date = datetime.strftime(est,  "%B %-d, %Y")
 
 	embed = discord.Embed(title=date, color=0xff0000)
 	file = discord.File(f"{IMAGES_ICONS}FeelsDevilsMan.png", filename=f"FeelsDevilsMan.png")
