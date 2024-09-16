@@ -8,7 +8,6 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta
 
-import asyncio
 import os
 
 from discord.ext.commands import Bot
@@ -16,6 +15,7 @@ from discord.ext.commands import Bot
 from dotenv import load_dotenv
 
 from database.database import Database
+from util import game_channel
 
 BANISH_TIMERS = {}
 load_dotenv()
@@ -63,141 +63,16 @@ class Admins(commands.Cog):
 					timer_ = timer.Timer(total_banish_secs, self._unbanish_cb, user)
 					BANISH_TIMERS[str(user.id)] = timer_
 
-	async def update_channel_setting(self, ctx, channel_id, action, channel):
-		channels_existing = await self.cfg.get_channels(channel_id)
-		if action == 'add':
-			try:
-				if channels_existing is None:
-					await self.cfg.set_channels(channel_id, [channel.id])
-					await ctx.respond('Added channel.')
-				else:
-					if channel.id not in channels_existing:
-						channels_existing.append(channel.id)
-						await self.cfg.set_channels(channel_id, [c for c in channels_existing])
-						await ctx.respond('Added channel.')
-					else:
-						await ctx.respond('Channel already exists in settings!')
-			except Exception as e:
-				self.log.exception("Error with updating channels")
-				await ctx.respond('Error. Have my owner check logs.')
-		elif action == 'remove':
-			try:
-				if channels_existing is None:
-					await ctx.respond("Oops, no channels are set. Try `add`ing some.")
-				else:
-					tmp = list(channels_existing)
-					if channel.id in tmp:
-						tmp.remove(channel.id)
-
-					if len(tmp) > 0:
-						channels = tmp
-						await self.cfg.set_channels(channel_id, [c for c in channels])
-					else:
-						channels = None
-						await self.cfg.set_channels(channel_id, channels)
-					await ctx.respond('Removed channel.')
-			except Exception as e:
-				self.log.exception("Error with deleting channels")
-				await ctx.respond('Error. Have my owner check logs.')
-
-	async def update_message_setting(self, ctx, message_id, action, message):
-		messages_existing = await self.cfg.get_messages(message_id)
-
-		if action == 'add':
-			try:
-				if messages_existing is None:
-					await self.cfg.set_messages(message_id, [message])
-					await ctx.respond('Added message.')
-				else:
-					if message not in messages_existing:
-						messages_existing.append(message)
-						await self.cfg.set_messages(message_id, [m for m in messages_existing])
-						await ctx.respond('Added message.')
-					else:
-						await ctx.respond('Message already exists in settings!')
-			except Exception as e:
-				self.log.exception("Error with updating messages")
-				await ctx.respond('Error. Have my owner check logs.')
-		elif action == 'remove':
-			try:
-				if messages_existing is None:
-					await ctx.respond("Oops, no messages are set. Try `add`ing some.")
-				else:
-					tmp = list(messages_existing)
-					if int(message) in tmp:
-						tmp.remove(message)
-
-					if len(tmp) > 0:
-						messages = tmp
-						await self.cfg.set_messages(message_id, [m for m in messages])
-					else:
-						messages = None
-						await self.cfg.set_messages(message_id, messages)
-					await ctx.respond('Removed message.')
-			except Exception as e:
-				self.log.exception("Error with deleting messages")
-				await ctx.respond('Error. Have my owner check logs.')
-
-	async def update_role_setting(self, ctx, role_id, action, role):
-		roles_existing = await self.cfg.get_roles(role_id)
-		if action == 'add':
-			try:
-				if roles_existing is None:
-					await self.cfg.set_roles(role_id, [role.id])
-					await ctx.respond('Added role.')
-				else:
-					if role.id not in roles_existing:
-						roles = roles_existing.append(role.id)
-						await self.cfg.set_roles(role_id, [r for r in roles])
-						await ctx.respond('Added role.')
-					else:
-						await ctx.respond('Role already exists in settings!')
-			except Exception as e:
-				self.log.exception("Error with updating roles")
-				await ctx.respond('Error. Have my owner check logs.')
-		elif action == 'remove':
-			try:
-				if roles_existing is None:
-					await ctx.respond("Oops, no roles are set. Try `add`ing some.")
-				else:
-					tmp = list(roles_existing)
-					if role.id in tmp:
-						tmp.remove(role.id)
-
-					if len(tmp) > 0:
-						roles = tmp
-						await self.cfg.set_roles(role_id, [r for r in roles])
-					else:
-						roles = None
-						await self.cfg.set_roles(role_id, roles)
-					await ctx.respond('Removed role.')
-			except Exception as e:
-				self.log.exception("Error with deleting roles")
-				await ctx.respond('Error. Have my owner check logs.')
-
 	@commands.slash_command(guild_ids=[guild_id], name='open', description='Opens game chat.')
 	@commands.has_permissions(administrator=True)
 	@discord.default_permissions(administrator=True)
-	async def open(self, ctx):
+	@discord.commands.option('message', description='Enter the message to send', required=False)
+	async def open(self, ctx, message: str = None):
 		self.log.info(f"{ctx.author} opened game channels")
-		worker_tasks = []
-
-		for channel_id in await self.cfg.get_channels('GameChannels'):
-			for role in await self.cfg.get_roles('GameChannels'):
-				wt = asyncio.ensure_future(self.open_channel(channel_id, int(role), ctx))
-				worker_tasks.append(wt)
-
-		await asyncio.gather(*worker_tasks)
+		
+		await game_channel.open_channel(self.bot, message)
 
 		await ctx.respond("Game channel(s) opened!", delete_after=3)
-
-	async def open_channel(self, channel_id, role, ctx):
-		self.log.info(f'Opening {channel_id} for {role}')
-		channel = self.bot.get_channel(int(channel_id))
-		role = get(ctx.guild.roles, id=role)
-		await channel.set_permissions(role, read_messages=True,
-														  send_messages=None)
-		await channel.send('Game chat is open!')
 
 	@open.error
 	async def open_error(self, ctx, error):
@@ -208,27 +83,13 @@ class Admins(commands.Cog):
 	@commands.slash_command(guild_ids=[guild_id], name='close', description='Closes game chat.')
 	@commands.has_permissions(administrator=True)
 	@discord.default_permissions(administrator=True)
-	async def close(self, ctx):
+	@discord.commands.option('message', description='Enter the message to send', required=False)
+	async def close(self, ctx, message: str = None):
 		self.log.info(f"{ctx.author} closed game channels")
 
-		worker_tasks = []
-
-		for channel_id in await self.cfg.get_channels('GameChannels'):
-			for role in await self.cfg.get_roles('GameChannels'):
-				wt = asyncio.ensure_future(self.close_channel(channel_id, int(role), ctx))
-				worker_tasks.append(wt)
-
-		await asyncio.gather(*worker_tasks)
+		await game_channel.close_channel(self.bot, message)
 
 		await ctx.respond("Game channel(s) closed!", delete_after=3)
-
-	async def close_channel(self, channel_id, role, ctx):
-		self.log.info(f'Closing {channel_id}')
-		channel = self.bot.get_channel(int(channel_id))
-		role = get(ctx.guild.roles, id=role)
-		await channel.set_permissions(role, read_messages=True,
-														  send_messages=False)
-		await channel.send('Game chat is closed!')
 
 	@close.error
 	async def close_error(self, ctx, error):
@@ -279,7 +140,7 @@ class Admins(commands.Cog):
 			return
 
 		self.log.info(f"{ctx.author} is {action} {category} channels: {str(channel)}")
-		await self.update_channel_setting(ctx, setting_key, action, channel)
+		await self.cfg.update_channel_setting(ctx, setting_key, action, channel)
 
 	@channel.error
 	async def channel_error(self, ctx, error):
@@ -291,7 +152,7 @@ class Admins(commands.Cog):
 	@discord.commands.option('message', description='Enter the message ID for receiving react alerts')
 	async def reactalert(self, ctx, action: str, message: int):
 		self.log.info(f"{ctx.author} is {action} reactalert messages: {str(message)}")
-		await self.update_message_setting(ctx, 'ReactAlert', action, int(message))
+		await self.cfg.update_message_setting(ctx, 'ReactAlert', action, int(message))
 
 	@reactalert.error
 	async def reactalert_error(self, ctx, error):
@@ -646,13 +507,13 @@ class Admins(commands.Cog):
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	@commands.slash_command(guild_ids=[guild_id], name='incident', description='Create an incident report.')
+	@commands.slash_command(guild_ids=[guild_id], name='create_incident', description='Create an incident report.')
 	@commands.has_permissions(administrator=True)
 	@discord.default_permissions(administrator=True)
 	@discord.commands.option('user', description='Enter the user to create an incident report for')
 	@discord.commands.option('description', description='Enter the description of the incident')
 	@discord.commands.option('decision', description='Enter the decision of the incident')
-	async def incident(self, ctx, user: discord.Member, description: str, decision: str):
+	async def create_incident(self, ctx, user: discord.Member, description: str, decision: str):
 		self.log.info(f"{ctx.author} is creating an incident report.")
 
 		reported_by = str(ctx.author.id)
@@ -663,18 +524,18 @@ class Admins(commands.Cog):
 		else:
 			await ctx.respond("Incident report not created!")
 
-	@incident.error
-	async def incident_error(self, ctx, error):
+	@create_incident.error
+	async def create_incident_error(self, ctx, error):
 		self.log.exception("Create report error")
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-	@commands.slash_command(guild_ids=[guild_id], name="getincident", description="Gets incident reports for the specified user")
+	@commands.slash_command(guild_ids=[guild_id], name="get_incident", description="Gets incident reports for the specified user")
 	@commands.has_permissions(administrator=True)
 	@discord.default_permissions(administrator=True)
 	@discord.commands.option('user', description='Enter the user to get incident reports for', required=False)
 	@discord.commands.option('user_id', description='Enter the user to get incident reports for', required=False)
-	async def getincident(self, ctx, user: discord.Member = None, user_id: str = None):
+	async def get_incident(self, ctx, user: discord.Member = None, user_id: str = None):
 		if not user and not user_id:
 			ctx.respond("I can't read your mind! Enter a user.")
 			
@@ -726,8 +587,8 @@ class Admins(commands.Cog):
 		)
 		await paginator.respond(ctx.interaction, ephemeral=False)
 
-	@getincident.error
-	async def getincident_error(self, ctx, error):
+	@get_incident.error
+	async def get_incident_error(self, ctx, error):
 		self.log.exception("Get incident error")
 
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)

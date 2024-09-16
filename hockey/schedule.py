@@ -62,7 +62,6 @@ class Schedule:
         """
         Get the current schedule.
         """
-        print("schedule", self.schedule)
         games = []
         if number_of_games:
             for game in self.schedule[:number_of_games]:

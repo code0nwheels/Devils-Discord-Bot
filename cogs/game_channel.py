@@ -12,6 +12,8 @@ from logging.handlers import RotatingFileHandler
 import asyncio
 from datetime import datetime, timedelta
 
+from util import game_channel
+
 PREGAME_TIME = 60 * 30
 CLOSE_DELAY = 60 * 5
 CLOSE_DELAY_MESSAGE = "Closing game chat in 5 minutes."
@@ -47,7 +49,7 @@ class GameChannel(commands.Cog):
         self.log.info(f"Fetched next game: {self.current_game}")
 
         if self.current_game:
-            await self.update_description_and_status(self.current_game)
+            await game_channel.update_description_and_status(self.bot, self.current_game)
             ready = await self.wait_until_ready(self.current_game)
             if not ready:
                 self.log.warning("Game was not ready in time.")
@@ -61,61 +63,16 @@ class GameChannel(commands.Cog):
             self.log.info(f"Fetched next game after current: {next_game}")
             await self.close_game_channel(self.current_game, next_game)
 
-    async def update_description_and_status(self, game: Game) -> None:
-        self.log.info("Updating channel description and bot status.")
-        channel_category_name = "OFFSEASON"
-        channel_description = ""
-        bot_status = "Golf!"
-
-        if game:
-            away_team_name = game.away_team_full_name
-            away_team_abbr = game.away_team_abbr
-            home_team_name = game.home_team_full_name
-            home_team_abbr = game.home_team_abbr
-            game_time_category = game.game_time("%-I:%M %p ET")
-            game_date = game.game_time("%-m/%-d")
-
-            channel_category_name = f"{away_team_abbr} @ {home_team_abbr} {game_date} {game_time_category}"
-            channel_description = f"{away_team_name} @ {home_team_name} {game_date}"
-            bot_status = f"{away_team_abbr} @ {home_team_abbr} {game_date} {game_time_category}"
-        
-        await self.bot.change_presence(activity=discord.Game(bot_status))
-        self.log.info(f"Bot status updated to: {bot_status}")
-
-        channels = await self.get_channels()
-        categories = [channel.category for channel in channels]
-
-        for channel in channels:
-            await channel.edit(topic=channel_description)
-            self.log.info(f"Channel {channel.id} description updated to: {channel_description}")
-        
-        for category in categories:
-            await category.edit(name=channel_category_name)
-            self.log.info(f"Category {category.id} name updated to: {channel_category_name}")
+    
 
     async def open_game_channel(self, game: Game) -> None:
         self.log.info("Opening game channel.")
-        channels = await self.get_channels()
-        roles = await self.get_roles()
-        channels_and_roles_to_update: dict[discord.TextChannel, discord.Role] = {}
-        playing_against = game.away_team_name if game.home_team_id == 1 else game.home_team_name
-
-        for channel in channels:
-            for role in roles:
-                if role in channel.overwrites:
-                    if not channel.overwrites[role].send_messages:
-                        channels_and_roles_to_update[channel] = role
-
-        for channel, role in channels_and_roles_to_update.items():
-            await channel.set_permissions(role, send_messages=True)
-            await channel.send(f"Game chat is now open! We're playing the **{playing_against}**!")
-            self.log.info(f"Game channel {channel.id} opened for role {role.id}.")
+        
+        await game_channel.open_channel(self.bot, f"Game chat is now open for **{game.away_team_abbr} @ {game.home_team_abbr}**!")
 
     async def close_game_channel(self, cur_game: Game, next_game: Game) -> None:
         self.log.info("Closing game channel.")
-        channels = await self.get_channels()
-        roles = await self.get_roles()
-        channels_and_roles_to_update: dict[discord.TextChannel, discord.Role] = {}
+        
         closing_message = ""
 
         if next_game:
@@ -172,22 +129,9 @@ class GameChannel(commands.Cog):
             else:
                 closing_message = "Game chat is now closed. Enjoy the offseason!"
 
-        for channel in channels:
-            for role in roles:
-                if role in channel.overwrites:
-                    if channel.overwrites[role].send_messages:
-                        channels_and_roles_to_update[channel] = role
-
-        if channels_and_roles_to_update:
-            for channel in channels_and_roles_to_update.keys():
-                await channel.send(CLOSE_DELAY_MESSAGE)
-                self.log.info(f"Close delay message sent to channel {channel.id}.")
-            await asyncio.sleep(CLOSE_DELAY)
-
-            for channel, role in channels_and_roles_to_update.items():
-                await channel.set_permissions(role, send_messages=False)
-                await channel.send(closing_message)
-                self.log.info(f"Game channel {channel.id} closed for role {role.id}.")
+        await game_channel.open_channel(self.bot, CLOSE_DELAY_MESSAGE)
+        await asyncio.sleep(CLOSE_DELAY)
+        await game_channel.close_channel(self.bot, closing_message)
 
     async def wait_until_ready(self, game: Game) -> bool:
         self.log.info(f"Waiting until ready for game {game.game_id}.")
@@ -220,27 +164,6 @@ class GameChannel(commands.Cog):
                 self.log.info(f"Game {game.game_id} is over or cancelled.")
                 break
             await asyncio.sleep(60)
-
-    async def get_channels(self) -> list[discord.TextChannel]:
-        channels = []
-        channel_ids = await self.cfg.get_channels("GameChannels")
-
-        for channel_id in channel_ids:
-            channels.append(self.bot.get_channel(channel_id))
-
-        self.log.info(f"Retrieved {len(channels)} channels for game communication.")
-        return channels
-
-    async def get_roles(self) -> list[discord.Role]:
-        roles = []
-        role_ids = await self.cfg.get_roles("GameChannels")
-
-        for role_id in role_ids:
-            role = get(self.bot.guilds[0].roles, id=role_id)
-            roles.append(role)
-
-        self.log.info(f"Retrieved {len(roles)} roles for game communication.")
-        return roles
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(GameChannel(bot))

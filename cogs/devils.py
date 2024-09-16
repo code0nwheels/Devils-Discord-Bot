@@ -12,7 +12,7 @@ from discord.commands import SlashCommandGroup
 import dateparser
 from dotenv import load_dotenv
 
-from util import create_embed, settings
+from util import create_embed, settings, report_view
 from util.dicts import team_dict
 from hockey.schedule import Schedule
 
@@ -33,11 +33,11 @@ class Devils(commands.Cog):
 		self.log.addHandler(handler)
 		self.log.setLevel(logging.INFO)
 
-	games_group = SlashCommandGroup(name="games", description="Commands related to games.")
+	game_commands = SlashCommandGroup(name="game", description="Commands related to games.")
 
-	@games_group.command(guild_ids=[guild_id], name='game', description='Gets game for a specific date. Defaults to today.')
+	@game_commands.command(guild_ids=[guild_id], name='fetch_game', description='Gets game for a specific date. Defaults to today.')
 	@discord.commands.option(name="date", description="Enter a date. Omit for today.", required=False)
-	async def game(self, ctx, date: str = None):
+	async def fetch_game(self, ctx, date: str = None):
 		self.log.info(f"{ctx.author} is requesting a game for {date or 'today'}...")
 		try:
 			date = datetime.strftime(dateparser.parse(date) if date else datetime.now(), "%Y-%m-%d")
@@ -55,8 +55,8 @@ class Devils(commands.Cog):
 		else:
 			await self._send_no_game_embed(ctx, date, "/game")
 
-	@game.error
-	async def game_error(self, ctx, error):
+	@fetch_game.error
+	async def fetch_game_error(self, ctx, error):
 		self.log.exception("Error processing the game command")
 		await ctx.respond("Oops, something went wrong.")
 
@@ -76,11 +76,12 @@ class Devils(commands.Cog):
 			self.log.exception("Error creating no game embed")
 			await ctx.respond("Oops, something went wrong.")
 
-	async def get_x_games(self, ctx, x, games):
+	async def _get_x_games(self, ctx, x, games):
 		self.log.info(f"{ctx.author} is requesting the next {x} games...")
 		
 		# Limit the number of games to the requested number or fewer
 		games = games[:x] if games else []
+		print(games)
 
 		if not games:
 			await self._send_no_game_embed(ctx, '', "/nextgame")
@@ -93,13 +94,13 @@ class Devils(commands.Cog):
 			file, embed = await create_embed.create_game(g, "/nextgame")
 			pages_.append(pages.Page(embeds=[embed], files=[file]))
 
-		paginator = pages.Paginator(pages=pages_, use_default_buttons=False, loop_pages=False)
+		paginator = pages.Paginator(pages=pages_, loop_pages=False)
 		await paginator.respond(ctx.interaction, ephemeral=False)
 
-	@games_group.command(guild_ids=[guild_id], name='next_game', description='Gets the next upcoming game. Can specify how many games in the future you want or a specific team.')
+	@game_commands.command(guild_ids=[guild_id], name='next_game', description='Gets the next upcoming game. Can specify the next time they play a specific team.')
 	@discord.commands.option(name="games", description="Enter how many games in the future you want.", required=False)
-	@discord.commands.option(name="team", description="Enter the team you want to see the next game for.", autocomplete=lambda ctx: sorted([team for team in team_dict.values() if team.lower().startswith(ctx.value.lower())]), required=False)
-	async def nextgame(self, ctx, games: int = None, team: str = None):
+	@discord.commands.option(name="team", description="Enter the team you want to see the next game against.", autocomplete=lambda ctx: sorted([team for team in team_dict.values() if team.lower().startswith(ctx.value.lower())]), required=False)
+	async def next_game(self, ctx, games: int = None, team: str = None):
 		self.log.info(f"{ctx.author} is requesting the next game(s)")
 		await ctx.defer()
 		num_games = games or 1
@@ -110,9 +111,9 @@ class Devils(commands.Cog):
 		if not team:
 			game_info = await schedule.get_schedule(num_games) if num_games > 1 else [await schedule.get_next_game()]
 
-			game_info = [g for g in game_info if g and not (g.is_final or g.is_ppd or g.is_cancelled or g.game_state != "Scheduled")]
+			game_info = [g for g in game_info if g and not (g.is_final or g.is_ppd or g.is_cancelled)]
 			if game_info:
-				await self.get_x_games(ctx, num_games, game_info)
+				await self._get_x_games(ctx, num_games, game_info)
 			else:
 				await self._send_no_game_embed(ctx, '', "/nextgame")
 		else:
@@ -123,8 +124,8 @@ class Devils(commands.Cog):
 			else:
 				await self._send_no_game_embed(ctx, '', "/nextgame", no_date=True)
 
-	@nextgame.error
-	async def nextgame_error(self, ctx, error):
+	@next_game.error
+	async def next_game_error(self, ctx, error):
 		self.log.exception("Error processing the nextgame command")
 		await ctx.respond("Oops, something went wrong.")
 
@@ -148,7 +149,7 @@ class Devils(commands.Cog):
 	@report.error
 	async def report_error(self, ctx, error):
 		self.log.exception("Error processing the report command")
-		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
+		#await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
 
 	def _is_valid_message_link(self, message_link: str) -> bool:
 		return message_link.startswith("https") and "discord.com" in message_link and len(message_link[8:].split('/')) == 5
@@ -167,7 +168,9 @@ class Devils(commands.Cog):
 										  [violation, message_obj.content, f"[Click here to view]({message_obj.jump_url})"],
 										  f"Reported by {ctx.author} ({ctx.author.id})")
 		admin_role = get(ctx.guild.roles, name="Admins")
-		await channel.send(admin_role.mention, embed=embed)
+		view = report_view.ReportView(message_obj)
+		await channel.send(admin_role.mention, embed=embed, view=view)
+		self.bot.add_view(view)
 		await ctx.respond("Thank you! I have notified the team.", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='openhelp', description='Talk with the Admins in a private channel.')
