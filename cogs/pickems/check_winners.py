@@ -48,7 +48,8 @@ class CheckWinners(commands.Cog):
                 await asyncio.sleep(3600)
 
             yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-            await self.schedule.fetch_full_schedule(yesterday)
+            self.schedule.set_date(yesterday)
+            await self.schedule.fetch_full_schedule()
             games: list[Game] = await self.schedule.get_schedule()
 
             for game in games:

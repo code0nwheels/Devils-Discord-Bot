@@ -137,3 +137,10 @@ class Schedule:
                         _game.set_round(game['seriesStatus'])['round']
                         return _game
         return None
+    
+    async def set_date(self, date: str) -> None:
+        """
+        Set the date for the schedule.
+        """
+        self.date = date
+        self.season = self._calculate_season(datetime.strptime(date, "%Y-%m-%d"))
