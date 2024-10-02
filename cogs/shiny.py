@@ -3,8 +3,8 @@ import pytz
 import asyncio
 
 import discord
-from discord.ext import tasks
-from discord.ext import commands
+from discord.ext import tasks, commands
+from discord.utils import get
 
 from util import settings
 
@@ -27,7 +27,7 @@ class Shiny(commands.Cog):
             # not dst. wait an hour
             await asyncio.sleep(3600)
 
-        channel = self.bot.get_channel(456153889683800095)
+        channel = get(self.bot.get_all_channels(), name="sports")
         await channel.send("https://fxtwitter.com/heatdaddy69420/status/1571578791901929472")
     
     @shiny.before_loop

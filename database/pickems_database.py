@@ -41,6 +41,7 @@ class PickemsDatabase:
         except Exception as e:
             await self.conn.rollback()
             self.log.exception("Error committing")
+            self.log.info(f"Query: {statement} with values {values}")
         finally:
             await self.conn.close()
             self.conn = None
@@ -132,7 +133,7 @@ class PickemsDatabase:
     async def get_user_leaderboard_position(self, user_id, season):
         sql = "SELECT * FROM Leaderboard WHERE user_id = ? AND season = ?;"
 
-        user = await self.fetch(sql, user_id)
+        user = await self.fetch(sql, user_id, season)
 
         return user[0] if user else None
     
@@ -159,20 +160,27 @@ class PickemsDatabase:
         
         picks = await self.fetch(sql, date)
 
-        return {p[0]: p[1] for p in picks}
+        r = {}
+        for p in picks:
+            if p[0] in r:
+                r[p[0]].append(p[1])
+            else:
+                r[p[0]] = [p[1]]
+        
+        return r
     
-    async def update_record(self, user_id, win):
-        now = datetime.now().strftime('%Y-%m-%d %H:%M:?')
+    async def update_record(self, user_id, win, season):
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         #check if user's record exists
-        sql = "SELECT * FROM Records WHERE user_id = ?;"
-        record_exists = await self.fetch(sql, user_id)
+        sql = "SELECT * FROM Records WHERE user_id = ? and season = ?;"
+        record_exists = await self.fetch(sql, user_id, season)
         
         if not record_exists:
             #create user's record
-            sql = """INSERT INTO Records (user_id, wins, losses, updated_at)
-            VALUES (?, 0, 0, ?);"""
-            await self.query(sql, user_id, now)
+            sql = """INSERT INTO Records (user_id, wins, losses, season, updated_at)
+            VALUES (?, 0, 0, ?, ?);"""
+            await self.query(sql, user_id, season, now)
         
         #update user's record
         if win:
@@ -183,3 +191,5 @@ class PickemsDatabase:
             sql = """UPDATE Records
             SET losses = losses + 1, updated_at = ?
             WHERE user_id = ?;"""
+        
+        return await self.query(sql, now, user_id)

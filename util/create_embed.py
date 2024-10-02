@@ -10,7 +10,7 @@ from pytz import timezone
 from datetime import datetime
 from tzlocal import get_localzone
 
-async def create_game(game: Game, cmd: str):
+async def create_game(game: Game, cmd: str = ''):
 	away_team_obj = await game.get_away_team()
 	home_team_obj = await game.get_home_team()
 	away_team = away_team_obj.full_name
@@ -66,6 +66,40 @@ async def create_game(game: Game, cmd: str):
 	embed.set_footer(text=cmd)
 
 	return team_file, embed
+
+async def create_pickems_game(game: Game):
+	away_team_obj = await game.get_away_team()
+	home_team_obj = await game.get_home_team()
+	away_team = away_team_obj.full_name
+	home_team = home_team_obj.full_name
+
+	away_record = game.away_team_record
+	home_record = game.home_team_record
+
+	venue = game.venue
+
+	game_time = game.game_time("%-I:%M %p")
+	game_date = game.game_time("%B %-d, %Y")
+	game_time_obj = datetime.strptime(game_time, "%I:%M %p")
+	game_date_obj = datetime.strptime(game_date, "%B %d, %Y")
+
+	game_time_epoch = int(game_time_obj.timestamp())
+	game_date_epoch = int(game_date_obj.timestamp())
+
+	if game.is_tbd:
+		time = 'TBD'
+	else:
+		time = f"<t:{game_time_epoch}:t>" #time = datetime.strftime(est,  "%-I:%M %p")
+	game_date = f"<t:{game_date_epoch}:D>"
+
+	embed = discord.Embed(title=game_date, color=0xff0000)
+	embed.add_field(name=away_team, value=away_record, inline=True)
+	#embed.add_field(name="\u200b", value="\u200b", inline=True)
+	embed.add_field(name=home_team, value=home_record, inline=True)
+	embed.add_field(name="Time", value=time, inline=False)
+	embed.add_field(name="Venue", value=venue, inline=True)
+
+	return embed
 
 async def no_game(date, cmd, no_date=False):
 	if not date and not no_date:

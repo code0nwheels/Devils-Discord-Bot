@@ -101,29 +101,28 @@ class Settings(object):
 	async def get_messages(self, section):
 		self.config.read(CONFIG_FILE)
 		if section not in self.config.sections():
-			print('lul')
 			return None
 
 		try:
 			messages = ast.literal_eval(self.config[section]['messages'])
 			if messages and len(messages) > 0 and messages[0]:
-				return [int(m) for m in messages]
+				return messages
 			return None
 		except Exception as e:
-			print(e)
+			print(e, "Error with getting messages")
 			return None
 
 	async def update_channel_setting(self, ctx, channel_id, action, channel):
-		channels_existing = await self.cfg.get_channels(channel_id)
+		channels_existing = await self.get_channels(channel_id)
 		if action == 'add':
 			try:
 				if channels_existing is None:
-					await self.cfg.set_channels(channel_id, [channel.id])
+					await self.set_channels(channel_id, [channel.id])
 					await ctx.respond('Added channel.')
 				else:
 					if channel.id not in channels_existing:
 						channels_existing.append(channel.id)
-						await self.cfg.set_channels(channel_id, [c for c in channels_existing])
+						await self.set_channels(channel_id, [c for c in channels_existing])
 						await ctx.respond('Added channel.')
 					else:
 						await ctx.respond('Channel already exists in settings!')
@@ -141,27 +140,27 @@ class Settings(object):
 
 					if len(tmp) > 0:
 						channels = tmp
-						await self.cfg.set_channels(channel_id, [c for c in channels])
+						await self.set_channels(channel_id, [c for c in channels])
 					else:
 						channels = None
-						await self.cfg.set_channels(channel_id, channels)
+						await self.set_channels(channel_id, channels)
 					await ctx.respond('Removed channel.')
 			except Exception as e:
 				self.log.exception("Error with deleting channels")
 				await ctx.respond('Error. Have my owner check logs.')
 
 	async def update_message_setting(self, ctx, message_id, action, message):
-		messages_existing = await self.cfg.get_messages(message_id)
+		messages_existing = await self.get_messages(message_id)
 
 		if action == 'add':
 			try:
 				if messages_existing is None:
-					await self.cfg.set_messages(message_id, [message])
+					await self.set_messages(message_id, [message])
 					await ctx.respond('Added message.')
 				else:
 					if message not in messages_existing:
 						messages_existing.append(message)
-						await self.cfg.set_messages(message_id, [m for m in messages_existing])
+						await self.set_messages(message_id, [m for m in messages_existing])
 						await ctx.respond('Added message.')
 					else:
 						await ctx.respond('Message already exists in settings!')
@@ -179,26 +178,26 @@ class Settings(object):
 
 					if len(tmp) > 0:
 						messages = tmp
-						await self.cfg.set_messages(message_id, [m for m in messages])
+						await self.set_messages(message_id, [m for m in messages])
 					else:
 						messages = None
-						await self.cfg.set_messages(message_id, messages)
+						await self.set_messages(message_id, messages)
 					await ctx.respond('Removed message.')
 			except Exception as e:
 				self.log.exception("Error with deleting messages")
 				await ctx.respond('Error. Have my owner check logs.')
 
 	async def update_role_setting(self, ctx, role_id, action, role):
-		roles_existing = await self.cfg.get_roles(role_id)
+		roles_existing = await self.get_roles(role_id)
 		if action == 'add':
 			try:
 				if roles_existing is None:
-					await self.cfg.set_roles(role_id, [role.id])
+					await self.set_roles(role_id, [role.id])
 					await ctx.respond('Added role.')
 				else:
 					if role.id not in roles_existing:
 						roles = roles_existing.append(role.id)
-						await self.cfg.set_roles(role_id, [r for r in roles])
+						await self.set_roles(role_id, [r for r in roles])
 						await ctx.respond('Added role.')
 					else:
 						await ctx.respond('Role already exists in settings!')
@@ -216,10 +215,10 @@ class Settings(object):
 
 					if len(tmp) > 0:
 						roles = tmp
-						await self.cfg.set_roles(role_id, [r for r in roles])
+						await self.set_roles(role_id, [r for r in roles])
 					else:
 						roles = None
-						await self.cfg.set_roles(role_id, roles)
+						await self.set_roles(role_id, roles)
 					await ctx.respond('Removed role.')
 			except Exception as e:
 				self.log.exception("Error with deleting roles")

@@ -36,6 +36,9 @@ class PostLeaderboard(commands.Cog):
                 await asyncio.sleep(3600)
             records_updated = await self.db.get_records_updated_at()
             records_updated = datetime.strptime(str(records_updated), '%Y-%m-%d %H:%M:%S')
+            self.log.info(f"Records updated at: {records_updated}")
+            self.log.info(f"Today's date: {datetime.now().date()}")
+            
             # if records_updated is today, post leaderboard
             if records_updated.date() == datetime.now().date():
                 # find channel by name

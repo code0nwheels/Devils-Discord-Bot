@@ -15,7 +15,6 @@ from logging.handlers import RotatingFileHandler
 
 class Home_Game(commands.Cog):
     def __init__(self, bot: discord.Bot):
-        print('Home_Game Cog Loaded')
         self.bot = bot
         self.cfg = settings.Settings()
         self.log = logging.getLogger(__name__)

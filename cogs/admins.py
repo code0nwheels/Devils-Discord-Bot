@@ -37,7 +37,7 @@ class Admins(commands.Cog):
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
 
-		self.db: Database = None
+		self.db: Database = Database()
 	
 	settings_cmd = SlashCommandGroup(name='settings', description='Settings for the bot', checks=[commands.has_permissions(administrator=True)], default_member_permissions=discord.Permissions(administrator=True))
 
@@ -150,9 +150,9 @@ class Admins(commands.Cog):
 	@settings_cmd.command(guild_ids=[guild_id], name='reactalert', description='Set or remove message(s) for reactalerts.')
 	@discord.commands.option('action', description='Choose the action', choices=['add', 'remove'])
 	@discord.commands.option('message', description='Enter the message ID for receiving react alerts')
-	async def reactalert(self, ctx, action: str, message: int):
+	async def reactalert(self, ctx, action: str, message: str):
 		self.log.info(f"{ctx.author} is {action} reactalert messages: {str(message)}")
-		await self.cfg.update_message_setting(ctx, 'ReactAlert', action, int(message))
+		await self.cfg.update_message_setting(ctx, 'ReactAlert', action, message)
 
 	@reactalert.error
 	async def reactalert_error(self, ctx, error):
@@ -374,7 +374,7 @@ class Admins(commands.Cog):
 		self.log.info(f"{ctx.author} is restarting the bot")
 
 		await ctx.respond("BRB...")
-		os.system("service devsbot restart")
+		os.system("service bryce restart")
 
 	@restart.error
 	async def restart_error(self, ctx, error):
@@ -499,7 +499,7 @@ class Admins(commands.Cog):
 		self.log.info(f"{ctx.author} is killing the bot")
 
 		await ctx.respond("Goodbye cruel world!")
-		os.system("service devsbot stop")
+		os.system("service bryce stop")
 
 	@kill.error
 	async def kill_error(self, ctx, error):

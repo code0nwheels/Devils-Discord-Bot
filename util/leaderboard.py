@@ -112,6 +112,10 @@ async def get_user_position(user_id, season: str = None):
 async def post_leaderboard(channel: discord.TextChannel, season: str = None):
     # fetch most recent records updated_at from db
     records_updated = await db.get_records_updated_at()
+    try:
+        records_updated = datetime.strptime(str(records_updated), '%Y-%m-%d %H:%M:%S')
+    except:
+        records_updated = datetime.strptime(str(records_updated), '%Y-%m-%d %H:%M:%S.%f')
     # convert records_updated to ET
     localtz = get_localzone()
     esttz = pytz.timezone('US/Eastern')
@@ -124,9 +128,9 @@ async def post_leaderboard(channel: discord.TextChannel, season: str = None):
     if not season:
         now = datetime.now(pytz.timezone('US/Eastern'))
         if now.month < 7 and now.month >= 1:
-            season = str(now.year - 1) + '-' + str(now.year)
+            season = str(now.year - 1) + str(now.year)
         else:
-            season = str(now.year) + '-' + str(now.year + 1)
+            season = str(now.year) + str(now.year + 1)
 
     # get leaderboards from db
     leaderboards = await db.get_leaderboard(season)

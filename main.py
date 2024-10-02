@@ -35,16 +35,13 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
-bot.load_extension('cogs.admins')
-bot.get_cog('Admins').set_db(Database())
-bot.load_extension('cogs.devils')
-bot.load_extension('cogs.reflex')
-bot.load_extension('cogs.help')
-bot.load_extension('cogs.four_twenty')
-bot.load_extension('cogs.home_game')
-bot.load_extension('cogs.shiny')
-bot.load_extension('cogs.game_channel')
-bot.load_extension('cogs.pickems', recursive=True)
+# loop through the cogs directory and load all the cogs
+for filename in os.listdir('./cogs'):
+	if filename.endswith('.py'):
+		bot.load_extension(f'cogs.{filename[:-3]}')
+	else:
+		#cogs within a folder; load them recursively
+		bot.load_extension(f'cogs.{filename}', recursive=True)
 
 ran = False
 
@@ -61,18 +58,6 @@ async def on_ready():
 
 		"""a = client.get_cog('Admins')
 		await a.setup_banished()"""
-
-		"""gc = GameChannel(bot, cfg)
-		log.info("Starting GameChannel...")
-		bot.loop.create_task(gc.run())"""
-
-		"""ft = FourTwenty(client, cfg)
-		log.info("Starting FourTwenty...")
-		client.loop.create_task(ft.run())"""
-
-		"""hg = HomeGame(client)
-		log.info("Starting HomeGame...")
-		client.loop.create_task(hg.run())"""
 
 		ran = True
 

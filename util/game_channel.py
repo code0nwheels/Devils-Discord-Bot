@@ -13,7 +13,11 @@ async def open_channel(bot, message=None):
         for role_id in role_ids:
             channel = bot.get_channel(int(channel_id))
             role = get(bot.guilds[0].roles, id=role_id)
-            await channel.set_permissions(role, send_messages=None)
+            if role in channel.overwrites:
+                if channel.overwrites[role].send_messages == True:
+                    continue
+            await channel.set_permissions(role, send_messages=True,
+                                          view_channel=True)
             if not message:
                 await channel.send("Game chat is now open!")
             else:
@@ -32,7 +36,8 @@ async def close_channel(bot, message=None):
                 if channel.overwrites[role].send_messages == False:
                     continue
             
-                await channel.set_permissions(role, send_messages=False)
+                await channel.set_permissions(role, send_messages=False,
+                                              view_channel=True)
                 if not message:
                     await channel.send("Game chat is now closed!")
                 else:
@@ -62,7 +67,7 @@ async def update_description_and_status(bot, game: Game) -> None:
 
             channel_category_name = f"{away_team_abbr} @ {home_team_abbr} {game_date} {game_time_category}"
             channel_description = f"{away_team_name} @ {home_team_name} {game_date}"
-            bot_status = f"{away_team_abbr} @ {home_team_abbr} {game_date} {game_time_category}"
+            bot_status = f"{game.playing_against_abbr} on {game_date} {game_time_category}"
         
         await bot.change_presence(activity=discord.Game(bot_status))
 

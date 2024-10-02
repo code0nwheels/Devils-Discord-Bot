@@ -1,5 +1,6 @@
 import aiohttp
 from datetime import datetime
+import pytz
 from typing import List, Dict, Any, Optional
 from .game import Game
 
@@ -15,9 +16,9 @@ class Schedule:
         self.date = date
 
         if date == "now":
-            current_date = datetime.now()
+            current_date = datetime.now().astimezone(pytz.UTC)
         else:
-            current_date = datetime.strptime(date, "%Y-%m-%d")
+            current_date = datetime.strptime(date, "%Y-%m-%d").astimezone(pytz.UTC)
 
         self.date = current_date.strftime("%Y-%m-%d")
         self.season = self._calculate_season(current_date)
@@ -114,7 +115,7 @@ class Schedule:
         Get the next game.
         """
         for game in self.schedule:
-            if game['gameDate'] > self.date or game['gameState'] in ['FUT', 'PRE']:
+            if game['gameState'] in ['FUT', 'PRE'] and game['gameScheduleState'] == 'OK':
                 if game['gameType'] != 3:
                     return await Game.init(game['id'])
                 else:
@@ -129,7 +130,7 @@ class Schedule:
         """
         for game in self.schedule:
             if game['awayTeam']['id'] == team_id or game['homeTeam']['id'] == team_id:
-                if game['gameDate'] > self.date or game['gameState'] in ['FUT', 'PRE']:
+                if game['gameState'] in ['FUT', 'PRE'] and game['gameScheduleState'] == 'OK':
                     if game['gameType'] != 3:
                         return await Game.init(game['id'])
                     else:
@@ -138,7 +139,7 @@ class Schedule:
                         return _game
         return None
     
-    async def set_date(self, date: str) -> None:
+    def set_date(self, date: str) -> None:
         """
         Set the date for the schedule.
         """

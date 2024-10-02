@@ -32,11 +32,9 @@ class CheckWinners(commands.Cog):
             date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
             
         picks = await self.db.get_picks(date)
-        for pick in picks:
-            if pick[0] in user_picks:
-                user_picks[pick[0]].append(pick[1])
-            else:
-                user_picks[pick[0]] = [pick[1]]
+        
+        for user, pick in picks.items():
+            user_picks[user] = pick
         
         return user_picks
     
@@ -53,16 +51,27 @@ class CheckWinners(commands.Cog):
             games: list[Game] = await self.schedule.get_schedule()
 
             for game in games:
-                if game.is_ppd:
+                if game.is_ppd or game.is_cancelled or not game.is_regular_season:
                     games.remove(game)
-                    await self.db.delete_picks(game.game_id)
+
+                    if game.is_ppd or game.is_cancelled:
+                        await self.db.delete_picks(game.game_id)
 
             if games:
-                winners = [game.winning_team.id for game in games]
+                now = datetime.now(pytz.timezone('US/Eastern'))
+                if now.month < 7 and now.month >= 1:
+                    season = str(now.year - 1) +str(now.year)
+                else:
+                    season = str(now.year) +str(now.year + 1)
+                self.log.info(f"Checking winners for {len(games)} games.")
+                winners = [game.winning_team_id for game in games]
+
                 user_picks = await self.get_picked_teams()
+
                 for user in user_picks:
                     for pick in user_picks[user]:
-                        await self.db.update_record(user, pick in winners)
+                        pick = int(pick)
+                        await self.db.update_record(user, pick in winners, season)
         except Exception as e:
             self.log.exception("Error checking winners")
 

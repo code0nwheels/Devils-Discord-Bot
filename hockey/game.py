@@ -104,6 +104,8 @@ class Game:
         """
         Get the away team's full name.
         """
+        if self.away_team_id == 59:
+            return "Utah Hockey Club"
         return self.game_object.get('awayTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
     
     @property
@@ -111,7 +113,9 @@ class Game:
         """
         Get the home team's full name.
         """
-        return self.game_object.get('homeTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
+        if self.home_team_id == 59:
+            return "Utah Hockey Club"
+        return self.game_object.get('homeTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('homeTeam', {}).get('name', {}).get("default", "Unknown")
     
     @property
     def away_team_name(self) -> str:
@@ -168,13 +172,21 @@ class Game:
         """
         Get the raw game start time.
         """
-        return datetime.strptime(self.game_object['startTimeUTC'], "%Y-%m-%dT%H:%M:%SZ")
+        utctz = pytz.timezone('UTC')
+        return utctz.localize(datetime.strptime(self.game_object['startTimeUTC'], "%Y-%m-%dT%H:%M:%SZ"))
     
     def raw_pregame_time(self, minutes_before_start: int=30) -> datetime:
         """
         Get the raw pregame time.
         """
         return self.raw_game_time - timedelta(minutes=minutes_before_start)
+    
+    @property
+    def raw_pregame_time(self) -> datetime:
+        """
+        Get the raw pregame time.
+        """
+        return self.raw_game_time - timedelta(minutes=30)
     
     def pregame_time(self, format: str, timezone: str = "US/Eastern", minutes_before_start: int=30) -> str:
         """
@@ -407,6 +419,26 @@ class Game:
         else:
             return self.home_team_id
         
+    @property
+    def playing_against(self) -> str:
+        """
+        Get the team that the home team is playing against.
+        """
+        if self.away_team_id == 1:
+            return self.home_team_full_name
+        else:
+            return self.away_team_full_name
+        
+    @property
+    def playing_against_abbr(self) -> str:
+        """
+        Get the team that the home team is playing against.
+        """
+        if self.away_team_id == 1:
+            return self.home_team_abbr
+        else:
+            return self.away_team_abbr
+        
     def set_round(self, round: int) -> None:
         """
         Set the round of the game.
@@ -421,3 +453,9 @@ class Game:
             return False
         
         return self.game_id == value.game_id
+    
+    def __str__(self) -> str:
+        """
+        Get the string representation of the game.
+        """
+        return f"{self.away_team_full_name} @ {self.home_team_full_name} - {self.game_time('%Y-%m-%d %I:%M %p')}"
