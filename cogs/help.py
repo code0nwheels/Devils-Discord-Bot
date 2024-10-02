@@ -2,14 +2,18 @@ import discord
 from discord.ext import commands, pages
 from util import create_embed
 
+import os
+
 import logging
 from logging.handlers import RotatingFileHandler
 
-with open('gid') as f:
-	guild_id = int(f.read().strip())
+from dotenv import load_dotenv
+
+load_dotenv()
+guild_id = int(os.getenv('GUILD_ID'))
 
 class Help(commands.Cog):
-	def __init__(self, bot):
+	def __init__(self, bot: commands.Bot):
 		self.bot = bot
 
 		logging.basicConfig(level=logging.INFO)
@@ -34,10 +38,32 @@ class Help(commands.Cog):
 	async def create_pages(self, items):
 		paginator = pages.Paginator(pages=items, show_disabled=False, show_indicator=True, timeout=180)
 
-		paginator.customize_button("next", button_label=">", button_style=discord.ButtonStyle.green)
-		paginator.customize_button("prev", button_label="<", button_style=discord.ButtonStyle.green)
-		paginator.customize_button("first", button_label="<<", button_style=discord.ButtonStyle.red)
-		paginator.customize_button("last", button_label=">>", button_style=discord.ButtonStyle.red)
+		# set up buttons
+		paginator.add_button(
+			pages.PaginatorButton(
+				"first", label='<<', style=discord.ButtonStyle.red, loop_label="fst"
+			)
+		)
+		paginator.add_button(
+			pages.PaginatorButton(
+				"prev", label="<", style=discord.ButtonStyle.green, loop_label="prv"
+			)
+		)
+		paginator.add_button(
+			pages.PaginatorButton(
+				"page_indicator", style=discord.ButtonStyle.gray, disabled=True
+			)
+		)
+		paginator.add_button(
+			pages.PaginatorButton(
+				"next", label='>', style=discord.ButtonStyle.green, loop_label="nxt"
+			)
+		)
+		paginator.add_button(
+			pages.PaginatorButton(
+				"last", label='>>', style=discord.ButtonStyle.red, loop_label="lst"
+			)
+		)
 
 		return paginator
 
@@ -45,46 +71,42 @@ class Help(commands.Cog):
 	async def help(self, ctx):
 		cmds = {}
 
-		for command in self.bot.application_commands:
-			if command.cog and command.cog.__cog_name__ != 'Help':
-				if command.cog.__cog_name__ == "Admins" and ctx.author.guild_permissions.administrator:
-					if command.cog.__cog_name__ not in cmds:
-						cmds[command.cog.__cog_name__] = [(command.name, command.description)]
-					else:
-						cog_name = command.cog.__cog_name__
-						while True:
-							if cog_name in cmds and len(cmds[cog_name]) == 5:
-								cog_name += " cont'd"
-							else:
-								break
-						if cog_name not in cmds:
-							cmds[cog_name] = [(command.name, command.description)]
-						else:
-							cmds[cog_name].append((command.name, command.description))
-				elif command.cog.__cog_name__ != "Admins":
-					if command.cog.__cog_name__ not in cmds:
-						cmds[command.cog.__cog_name__] = [(command.name, command.description)]
-					else:
-						cog_name = command.cog.__cog_name__
-						while True:
-							if cog_name in cmds and len(cmds[cog_name]) == 5:
-								cog_name += " cont'd"
-							else:
-								break
-						if cog_name not in cmds:
-							cmds[cog_name] = [(command.name, command.description)]
-						else:
-							cmds[cog_name].append((command.name, command.description))
+		bot_commands = sorted(self.bot.application_commands, key=lambda x: x.cog.__cog_name__)
+		#sort the commands by cog
+		for command in bot_commands:
+			if command.cog and command.cog.__cog_name__ == 'Help':
+				continue
+			if command.cog and command.cog.__cog_name__ not in cmds:
+				cmds[command.cog.__cog_name__] = [(command.name, command.description)]
+			else:
+				cmds[command.cog.__cog_name__].append((command.name, command.description))
+
+		#sort the commands within each cog
+		for key in cmds:
+			cmds[key] = sorted(cmds[key])
+
+		# break the commands into groups of 5; if there are more than 5 commands, name the group "key", "key 2", etc.
+		# this is to prevent the embed from being too long
+		tmp = {}
+		for key in cmds:
+			if len(cmds[key]) > 5:
+				tmp[key] = cmds[key][:5]
+				for i in range(1, len(cmds[key]) // 5):
+					tmp[f"{key} {i + 1}"] = cmds[key][i * 5:(i + 1) * 5]
+			else:
+				tmp[key] = cmds[key]
+			
+		cmds = tmp
 
 		help_embeds = await self.create_embeds(cmds)
 		paginator = await self.create_pages(help_embeds)
 
-		await paginator.respond(ctx, ephemeral=True)
+		await paginator.respond(ctx.interaction, ephemeral=True)
 
 	@help.error
 	async def help_error(self, ctx, error):
 		self.log.exception("Error")
-		await ctx.respond("Oops, something went wrong!")
+		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 
-def setup(bot):
+def setup(bot: commands.Bot):
 	bot.add_cog(Help(bot))

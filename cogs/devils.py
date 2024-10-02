@@ -1,252 +1,205 @@
+# devils.py
+
+import os
+import logging
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+
 import discord
 from discord.ext import commands, pages
 from discord.utils import get
-from util import create_embed, settings
-from hockey import hockey
-
-from discord.commands import Option, permissions
-
-from datetime import datetime
+from discord.commands import SlashCommandGroup
 import dateparser
+from dotenv import load_dotenv
 
-import aiofiles
+from util import create_embed, settings, report_view
+from util.dicts import team_dict
+from hockey.schedule import Schedule
 
-import logging
-from logging.handlers import RotatingFileHandler
+load_dotenv()
+guild_id = int(os.getenv('GUILD_ID'))
 
-with open('gid') as f:
-	guild_id = int(f.read().strip())
 
 class Devils(commands.Cog):
 	def __init__(self, bot):
 		self.bot = bot
 		self.cfg = settings.Settings()
 
-		logging.basicConfig(level=logging.INFO)
+		# Setup logging
 		self.log = logging.getLogger(__name__)
-		# add a rotating handler
-		handler = RotatingFileHandler('log/devils.log', maxBytes=5*1024*1024,
-									  backupCount=5)
-
-		# create a logging format
+		handler = RotatingFileHandler('log/devils.log', maxBytes=5*1024*1024, backupCount=5)
 		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 		handler.setFormatter(formatter)
 		self.log.addHandler(handler)
+		self.log.setLevel(logging.INFO)
 
-	@commands.slash_command(guild_ids=[guild_id], name='game', description='Gets game for a specific date. Defaults to today.')
-	async def game(self, ctx, date: Option(str, "Enter a date. Omit for today.", required=False) = None):
-		self.log.info(f"{ctx.author} is getting game for {str(date)}...")
-		if date:
-			try:
-				date = datetime.strftime(dateparser.parse(date), "%Y-%m-%d")
-			except:
-				self.log.exception("Error parsing date")
-				await ctx.respond("Unrecognized date format")
-				return
+	game_commands = SlashCommandGroup(name="game", description="Commands related to games.")
+
+	@game_commands.command(guild_ids=[guild_id], name='fetch_game', description='Gets game for a specific date. Defaults to today.')
+	@discord.commands.option(name="date", description="Enter a date. Omit for today.", required=False)
+	async def fetch_game(self, ctx, date: str = None):
+		self.log.info(f"{ctx.author} is requesting a game for {date or 'today'}...")
+		try:
+			date = datetime.strftime(dateparser.parse(date) if date else datetime.now(), "%Y-%m-%d")
+		except Exception:
+			self.log.exception("Error parsing date")
+			await ctx.respond("Unrecognized date format")
+			return
+
+		schedule = Schedule(date)
+		await schedule.fetch_team_schedule("njd")
+		game = await schedule.get_game()
+
+		if game:
+			await self._send_game_embed(ctx, game, "/game")
 		else:
-			date = None
+			await self._send_no_game_embed(ctx, date, "/game")
 
-		is_game, game_info = await hockey.get_game(None, date)
-
-		if is_game:
-			try:
-				file, embed = await create_embed.create_game(game_info, "/game")
-				await ctx.respond(file=file, embed=embed)
-			except Exception as e:
-				self.log.exception("Error with creating game")
-				await ctx.respond("Oops, something went wrong.")
-		else:
-			try:
-				file, embed = await create_embed.no_game(date, "/game")
-				await ctx.respond(file=file, embed=embed)
-			except Exception as e:
-				self.log.exception("Error with creating no_game")
-				await ctx.respond("Oops, something went wrong.")
-
-	@game.error
-	async def game_error(self, ctx, error):
-		self.log.exception("Error getting game")
-
+	@fetch_game.error
+	async def fetch_game_error(self, ctx, error):
+		self.log.exception("Error processing the game command")
 		await ctx.respond("Oops, something went wrong.")
 
-	async def get_x_games(self, ctx, x):
-		self.log.info(f"{ctx.author} is getting next {x} games...")
-
-		is_game, games = await hockey.get_next_x_games(x)
-
-		if is_game:
-			pages_ = []
-
-			for g in games:
-				file, embed = await create_embed.create_game(g, "/nextgame")
-				pages_.append(pages.Page(embeds=[embed,], files=[file,]))
-
-			paginator = pages.Paginator(
-				pages=pages_,
-				use_default_buttons=False,
-				loop_pages=False,
-				show_disabled=False,
-				author_check=False
-			)
-			paginator.add_button(
-				pages.PaginatorButton(
-					"first", label='<<', style=discord.ButtonStyle.red, loop_label="fst"
-				)
-			)
-			paginator.add_button(
-				pages.PaginatorButton(
-					"prev", label="<", style=discord.ButtonStyle.green, loop_label="prv"
-				)
-			)
-			paginator.add_button(
-				pages.PaginatorButton(
-					"page_indicator", style=discord.ButtonStyle.gray, disabled=True
-				)
-			)
-			paginator.add_button(
-				pages.PaginatorButton(
-					"next", label='>', style=discord.ButtonStyle.green, loop_label="nxt"
-				)
-			)
-			paginator.add_button(
-				pages.PaginatorButton(
-					"last", label='>>', style=discord.ButtonStyle.red, loop_label="lst"
-				)
-			)
-			await paginator.respond(ctx.interaction, ephemeral=False)
-		else:
-			file, embed = await create_embed.no_game('', "/nextgame")
+	async def _send_game_embed(self, ctx, game, path):
+		try:
+			file, embed = await create_embed.create_game(game, path)
 			await ctx.respond(file=file, embed=embed)
+		except Exception:
+			self.log.exception("Error creating game embed")
+			await ctx.respond("Oops, something went wrong.")
 
+	async def _send_no_game_embed(self, ctx, date, path, no_date=False):
+		try:
+			file, embed = await create_embed.no_game(date, path, no_date=no_date)
+			await ctx.respond(file=file, embed=embed)
+		except Exception:
+			self.log.exception("Error creating no game embed")
+			await ctx.respond("Oops, something went wrong.")
 
-	@commands.slash_command(guild_ids=[guild_id], name='nextgame', description='Gets the next upcoming game.')
-	async def nextgame(self, ctx, games: Option(int, "Enter how many games in the future you want.", required=False) = None):
+	async def _get_x_games(self, ctx, x, games):
+		self.log.info(f"{ctx.author} is requesting the next {x} games...")
+		
+		# Limit the number of games to the requested number or fewer
+		games = games[:x] if games else []
+		print(games)
+
 		if not games:
-			self.log.info(f"{ctx.author} is getting the next upcoming game")
-			is_game, game_info = await hockey.next_game()
+			await self._send_no_game_embed(ctx, '', "/nextgame")
+			return
 
-			if is_game:
-				try:
-					file, embed = await create_embed.create_game(game_info, "/nextgame")
-					await ctx.respond(embed=embed, file=file)
-				except Exception as e:
-					self.log.exception("Error with creating game")
-					await ctx.respond("Oops, something went wrong.")
+		pages_ = []
+
+		# Correctly await the coroutine and get the results
+		for g in games:
+			file, embed = await create_embed.create_game(g, "/nextgame")
+			pages_.append(pages.Page(embeds=[embed], files=[file]))
+
+		paginator = pages.Paginator(pages=pages_, loop_pages=False)
+		await paginator.respond(ctx.interaction, ephemeral=False)
+
+	@game_commands.command(guild_ids=[guild_id], name='next_game', description='Gets the next upcoming game. Can specify the next time they play a specific team.')
+	@discord.commands.option(name="games", description="Enter how many games in the future you want.", required=False)
+	@discord.commands.option(name="team", description="Enter the team you want to see the next game against.", autocomplete=lambda ctx: sorted([team for team in team_dict.values() if team.lower().startswith(ctx.value.lower())]), required=False)
+	async def next_game(self, ctx, games: int = None, team: str = None):
+		self.log.info(f"{ctx.author} is requesting the next game(s)")
+		await ctx.defer()
+		num_games = games or 1
+		schedule = Schedule()
+
+		await schedule.fetch_team_schedule("njd")
+
+		if not team:
+			game_info = await schedule.get_schedule(num_games) if num_games > 1 else [await schedule.get_next_game()]
+
+			game_info = [g for g in game_info if g and not (g.is_final or g.is_ppd or g.is_cancelled)]
+			if game_info:
+				await self._get_x_games(ctx, num_games, game_info)
 			else:
-				await ctx.respond(':(')
+				await self._send_no_game_embed(ctx, '', "/nextgame")
 		else:
-			await self.get_x_games(ctx, games)
+			team_id = next(key for key, value in team_dict.items() if value == team)
+			game = await schedule.get_next_time_playing_opponent(int(team_id))
+			if game:
+				await self._send_game_embed(ctx, game, "/nextgame")
+			else:
+				await self._send_no_game_embed(ctx, '', "/nextgame", no_date=True)
 
-	@nextgame.error
-	async def nextgame_error(self, ctx, error):
-		self.log.exception("Error getting next game")
-
-		await ctx.respond("Oops, something went wrong.")
-
-	@commands.slash_command(guild_ids=[guild_id], name='lines', description='Gets lines from Dailyfaceoff.')
-	async def lines(self, ctx):
-		self.log.info(f"{ctx.author} is getting lines")
-		async with aiofiles.open("lines.txt", mode='r') as f:
-			content = await f.read()
-
-		lines = content.split('\n===\n')
-
-		fwd_all_string = lines[0]
-		def_all_string = lines[1]
-		g_all_string = lines[2]
-		last_update = lines[3]
-
-		names = ["Forwards", "Defense", "Goalies"]
-		values = [fwd_all_string, def_all_string, g_all_string]
-
-		embed = await create_embed.create('Lines', "The current lineup on DailyFaceoff", names, values, f"/lines | Updated on {last_update}")
-
-		await ctx.respond(embed=embed)
-
-	@lines.error
-	async def lines_error(self, ctx, error):
-		self.log.exception("Error getting lines")
-
+	@next_game.error
+	async def next_game_error(self, ctx, error):
+		self.log.exception("Error processing the nextgame command")
 		await ctx.respond("Oops, something went wrong.")
 
 	@commands.slash_command(guild_ids=[guild_id], name='report', description='Report a message that breaks a rule.')
-	async def report(self, ctx, message_link: Option(str, "Enter the message link in violation."), violation: Option(str, "Enter the violation.")):
+	@discord.commands.option(name="message_link", description="Enter the message link in violation.", required=True)
+	@discord.commands.option(name="violation", description="Enter the violation.", required=True)
+	async def report(self, ctx, message_link: str, violation: str):
 		self.log.info(f"{ctx.author} is reporting a message")
-		error_message = """Invalid link. Please try again.\
-
-**On Desktop:** Right click the message > Copy Message Link
-**On Mobile:**
-**Android** Hold the message > Share > Copy
-**iOS** Hold the message > Copy Message Link"""
-
-		if not message_link.startswith("https") or "discord.com" not in message_link:
-			await ctx.respond(error_message, ephemeral=True)
-			return
-
-		if len(message_link[8:].split('/')) != 5:
-			await ctx.respond(error_message, ephemeral=True)
+		if not self._is_valid_message_link(message_link):
+			await ctx.respond(self._invalid_link_message(), ephemeral=True)
 			return
 
 		try:
-			messageObj = await commands.MessageConverter().convert(ctx, message_link)
+			message_obj = await commands.MessageConverter().convert(ctx, message_link)
 		except:
 			await ctx.respond("I couldn't find that message. Could it be deleted?", ephemeral=True)
 			return
 
-		channel = get(ctx.guild.text_channels, name="member-reports")
-
-		names = ["Violation", "Content", "URL"]
-		values = [violation, messageObj.content, f"[Click here to view]({message_link})"]
-
-		embed = await create_embed.create('Report', f"Message author: {messageObj.author} ({messageObj.author.id})", names, values, f"Reported by {ctx.author} ({ctx.author.id})")
-
-		admin_role = get(ctx.guild.roles, id=348226061076791298)
-		await channel.send(admin_role.mention, embed=embed)
-
-		await ctx.respond("Thank you! I have notified the team.", ephemeral=True)
+		await self._send_report(ctx, message_obj, violation)
 
 	@report.error
 	async def report_error(self, ctx, error):
-		self.log.exception("Error with the report command")
+		self.log.exception("Error processing the report command")
+		#await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
 
-		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
+	def _is_valid_message_link(self, message_link: str) -> bool:
+		return message_link.startswith("https") and "discord.com" in message_link and len(message_link[8:].split('/')) == 5
+
+	def _invalid_link_message(self) -> str:
+		return ("Invalid link. Please try again.\n\n"
+				"**On Desktop:** Right-click the message > Copy Message Link\n"
+				"**On Mobile:**\n"
+				"**Android**: Hold the message > Share > Copy\n"
+				"**iOS**: Hold the message > Copy Message Link")
+
+	async def _send_report(self, ctx, message_obj, violation):
+		channel = get(ctx.guild.text_channels, name="member-reports")
+		embed = await create_embed.create('Report', f"Message author: {message_obj.author} ({message_obj.author.id})",
+										  ["Violation", "Content", "URL"], 
+										  [violation, message_obj.content, f"[Click here to view]({message_obj.jump_url})"],
+										  f"Reported by {ctx.author} ({ctx.author.id})")
+		admin_role = get(ctx.guild.roles, name="Admins")
+		view = report_view.ReportView(message_obj)
+		await channel.send(admin_role.mention, embed=embed, view=view)
+		self.bot.add_view(view)
+		await ctx.respond("Thank you! I have notified the team.", ephemeral=True)
 
 	@commands.slash_command(guild_ids=[guild_id], name='openhelp', description='Talk with the Admins in a private channel.')
-	async def openhelp(self, ctx, brief_description: Option(str, "Enter a brief message of what you want to discuss.")):
+	@discord.commands.option(name="brief_description", description="Enter a brief message of what you want to discuss.", required=False)
+	async def openhelp(self, ctx, brief_description: str = None):
 		self.log.info(f"{ctx.author} is opening a help thread")
 
 		modmail_chan_id = await self.cfg.get_channels("ModMailChannels")
 		modmail_chan = get(ctx.guild.text_channels, id=modmail_chan_id[0])
+		existing_thread = self._find_existing_thread(ctx, modmail_chan.threads)
 
-		no_of_active_threads = len(modmail_chan.threads)
-		archived_threads = modmail_chan.archived_threads(private=True)
-		no_of_archived_threads = len(await archived_threads.flatten())
-		no_of_threads = no_of_active_threads + no_of_archived_threads
+		if existing_thread:
+			await ctx.respond(f"You already have a help thread open! {existing_thread.mention}", ephemeral=True)
+			return
 
-		for thread_ in modmail_chan.threads:
-			if str(ctx.author).lower().replace('#', '') in thread_.name:
-				if not thread_.archived:
-					await ctx.respond(f"You already have a help thread open! {thread_.mention}", ephemeral=True)
-					return
-
-
-		thread = await modmail_chan.create_thread(name=str(ctx.author).lower() + f"-{no_of_threads+1}")
-
-		names = ["Description"]
-		values = [brief_description]
-
-		embed = await create_embed.create(f'{ctx.author} ({ctx.author.id})', f"Needs help.", names, values, "")
-
-		admin_role = get(ctx.guild.roles, id=348226061076791298)
+		thread = await modmail_chan.create_thread(name=f"{ctx.author.name.lower()}-{len(modmail_chan.threads) + len(await modmail_chan.archived_threads().flatten()) + 1}")
+		embed = await create_embed.create(f'{ctx.author} ({ctx.author.id})', f"Needs help.", ["Description"], [brief_description], "")
+		admin_role = get(ctx.guild.roles, name="Admins")
 		await thread.send(f"{ctx.author.mention} {admin_role.mention}", embed=embed)
-
 		await ctx.respond(f"Thank you! I have notified the team. Your thread is {thread.mention}", ephemeral=True)
+
+	def _find_existing_thread(self, ctx, threads):
+		return next((thread for thread in threads if str(ctx.author).lower().replace('#', '') in thread.name and not thread.archived), None)
 
 	@openhelp.error
 	async def openhelp_error(self, ctx, error):
-		self.log.error(f"Error with the openhelp command: {error}")
-
+		self.log.exception(f"Error processing the openhelp command: {error}")
 		await ctx.respond("If you're seeing this, something went critically wrong. Sorry =/", ephemeral=True)
+
 
 def setup(bot):
 	bot.add_cog(Devils(bot))

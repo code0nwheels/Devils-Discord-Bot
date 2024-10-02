@@ -63,20 +63,6 @@ class Reflex(commands.Cog):
 
 		channel = get(guild.text_channels, name="admin-chat")
 		await channel.send(f'{payload.member.mention} reacted with {payload.emoji}')
-	
-	@commands.Cog.listener()
-	async def on_member_join(self, member):
-		# read the file
-		async with aiofiles.open("/root/discord/hn/spypetids.txt", mode="r") as f:
-			ids = await f.read()
-			ids = ids.split("\n")
-			ids = [int(i) for i in ids]
-		
-		if member.id in ids:
-			await member.ban(reason="SpyPet account")
-
-			async with aiofiles.open("/root/discord/hn/bannedspypetids.txt", mode="a") as f:
-				await f.write(f"{member.id}\n")
 
 def setup(bot):
 	bot.add_cog(Reflex(bot))
