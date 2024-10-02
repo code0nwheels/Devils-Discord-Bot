@@ -1,19 +1,15 @@
 import discord
 import logging
-import re
 from logging.handlers import RotatingFileHandler
 from discord.utils import get
-from discord.ext import tasks
-from discord.ext.commands import Bot
 from pytz import timezone
 from datetime import datetime, timedelta
-import time
-from tzlocal import get_localzone
 
 import asyncio
 
-from hockey import hockey
-from background.highlights import Highlights
+from hockey.schedule import Schedule
+from hockey.game import Game
+#from background.highlights import Highlights
 
 TOPIC_TEMPLATE = "{away_team} at {home_team}"
 CLOSING_TIME = 5
@@ -73,39 +69,51 @@ class GameChannel(object):
 		except Exception as e:
 			self.log.exception(f"Fatal error in updating description for {channel_id}")
 
-	async def monitor_game(self, game_id):
+	async def update_game_channels(self, away, home, game_date, game_time):
+		worker_tasks = []
+		for channel_id in await self.cfg.get_channels('GameChannels'):
+			self.log.info("Updating game channels category name")
+			channel = self.bot.get_channel(int(channel_id))
+			category = channel.category
+
+			await category.edit(name=f"{away.abbreviation} @ {home.abbreviation} {game_date} {game_time}")
+
+			self.log.info("Updating description with teams")
+			wt = asyncio.ensure_future(self.update_description(int(channel_id), TOPIC_TEMPLATE.format(away_team=away.full_name, home_team=home.full_name)))
+			worker_tasks.append(wt)
+
+		await asyncio.gather(*worker_tasks)
+
+	async def monitor_game(self, game: Game):
 		self.log.info("In monitor_game...")
 		try:
-			h = Highlights(self.bot, game_id, self.cfg)
+			"""h = Highlights(self.bot, game_id, self.cfg)
 			self.log.info("Starting Highlights...")
 			try:
 				self.bot.loop.create_task(h.run())
 			except Exception:
-				self.log.exception("Error starting Highlights")
+				self.log.exception("Error starting Highlights")"""
 
 			final = 0
 			while True:
 				try:
-					is_game, game_info = await hockey.get_game(game_id)
-					gamestatus = game_info['gameState']
-					schedstatus = game_info['gameScheduleState']
-					#self.log.info(f'Status: {status}\nFinal: {final}')
-					if gamestatus in ['OVER', 'FINAL', 'OFF'] or schedstatus in ['PPD', 'SUSP', 'CNCL']:
+					if game.is_final or game.is_ppd or game.is_cancelled:
 						final += 1
 
 						if final == 2:
-							self.log.info("Game ended. Leaving get score.")
+							self.log.info("Game ended. Leaving monitor_game.")
 							#self.post_reminder.cancel()
 							return
 					elif final > 0:
 						final = 0
+					await game.refresh()
 				except Exception as e:
-					self.log.exception("Fatal error in getting score")
+					self.log.exception("Fatal error in monitor_game")
 				finally:
 					self.log.info(f"Sleeping...")
 					await asyncio.sleep((IN_GAME_SLEEP * 60))
 		except Exception as e:
-			self.log.exception("Fatal error in getting score")
+			self.log.exception("Fatal error in monitor_game")
 
 	async def send_message(self, channel, message):
 		self.log.info(f"Sending message to {channel}...")
@@ -120,12 +128,14 @@ class GameChannel(object):
 		self.log.info("GameChannel started.")
 		while True:
 			go = True
-			is_game, game_info = await hockey.is_game_today()
+			schedule = Schedule()
+			await schedule.fetch_team_schedule('njd')
+			game = await schedule.get_next_game()
 			worker_tasks = []
+			is_game = game and game.is_today and not game.is_final and not game.is_ppd and not game.is_cancelled
 
 			if not is_game:
-				is_game, game_info = await hockey.next_game()
-				if not is_game:
+				if not game:
 					self.log.info("No game. Sleeping until 3am.")
 					await self.bot.change_presence(activity = discord.Game('Golf!'))
 					now = datetime.now()
@@ -134,85 +144,99 @@ class GameChannel(object):
 					await asyncio.sleep((to - now).total_seconds())
 					continue
 
-			away = game_info['awayTeam']
-			home = game_info['homeTeam']
+			away = await game.get_away_team()
+			home = await game.get_home_team()
 
-			utctz = timezone('UTC')
-			esttz = timezone('US/Eastern')
-			try:
-				time = game_info['startTimeUTC']
-				utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
-				utc2 = utctz.localize(utc)
-				est = utc2.astimezone(esttz)
-				epoch = int(est.timestamp())
+			self.log.info(f"Next game is {away.abbreviation} @ {home.abbreviation}.")
 
-				gmdt = datetime.strftime(est, "%Y-%m-%dT%H:%M:%S")
-			except:
-				gmdt = 'TBD'
-			self.log.info(f"Next game is {away['abbrev']} @ {home['abbrev']} {gmdt}.")
+			if not game.is_tbd:
+				raw_game_time = game.raw_game_time
+				game_time = game.game_time("%-I:%M %p ET")
+				
+				epoch = int(raw_game_time.timestamp())
+			else:
+				game_time = 'TBD'
 
-			while True:
-				is_game, game_info = await hockey.next_game()
-				if 'TBD' in game_info['gameScheduleState']:
-					time = 'TBD'
-				else:
-					time = datetime.strftime(est,  "%-I:%M %p ET")
-				date = datetime.strftime(est,  "%-m/%-d")
+			game_date = datetime.strftime(raw_game_time,  "%-m/%-d")
+			if away.id != 1:
+				await self.bot.change_presence(activity = discord.Game(f"{away.abbreviation} on {game_date} {game_time}"))
+			else:
+				await self.bot.change_presence(activity = discord.Game(f"{home.abbreviation} on {game_date} {game_time}"))
 
-				if game_info['awayTeam']['id'] != 1:
-					await self.bot.change_presence(activity = discord.Game(f"{away['abbrev']} on {date} {time}"))
-				else:
-					await self.bot.change_presence(activity = discord.Game(f"{home['abbrev']} on {date} {time}"))
+			await self.update_game_channels(away, home, game_date, game_time)
 
-				worker_tasks = []
-				for channel_id in await self.cfg.get_channels('GameChannels'):
-					self.log.info("Updating game channels category name")
-					channel = self.bot.get_channel(int(channel_id))
-					category = channel.category
-
-					await category.edit(name=f"{away['abbrev']} @ {home['abbrev']} {date} {time}")
-
-					self.log.info("Updating description with teams")
-					wt = asyncio.ensure_future(self.update_description(int(channel_id), TOPIC_TEMPLATE.format(away_team=away['name']['default'], home_team=home['name']['default'])))
-					worker_tasks.append(wt)
-
-				results = await asyncio.gather(*worker_tasks)
-
-				if time != 'TBD':
-					break
-				else:
-					self.log.info("Time is TBD. Checking again in 60min.")
-					await asyncio.sleep(3600)
-
-			pk = game_info['id']
-			dttime = game_info['startTimeUTC']
 			while True:
 				try:
-					is_game, game_info = await hockey.get_game(pk)
-					if game_info['gameState'] in ['FINAL', 'OFF', 'PPD', 'SUSP', 'CNCL']:
+					if game.is_tbd:
+						if not game.is_today:
+							self.log.info("Game is TBD and not today. Sleeping until 3am...")
+							now = datetime.now()
+							to = (now + timedelta(days = 1)).replace(hour=3, minute=0, second=0)
+							#self.log.info(now, to)
+							await asyncio.sleep((to - now).total_seconds())
+							await game.refresh()
+							continue
+
+						self.log.info("Game is TBD. Sleeping for 5min...")
+						await asyncio.sleep(300)
+						await game.refresh()
+						continue
+					elif not game.is_today:
+						self.log.info("Game is not today. Sleeping until 3am...")
+						now = datetime.now()
+						to = (now + timedelta(days = 1)).replace(hour=3, minute=0, second=0)
+						#self.log.info(now, to)
+						await asyncio.sleep((to - now).total_seconds())
+						await game.refresh()
+
+						# check if next game is the same
+						if schedule.get_next_game() != game:
+							go = False
+							break
+						continue
+					
+					await self.update_game_channels(away, home, game_date, game_time)
+					
+					if game.is_final or game.is_ppd or game.is_cancelled:
 						go = False
 						break
-					if dttime != game_info['startTimeUTC']:
-						go = False
-						break
+					
+					if game.is_today:
+						game_utc = game.raw_game_time
+						pregame_time = game_utc - timedelta(minutes=30)
 
-					pg = datetime.strptime(dttime, "%Y-%m-%dT%H:%M:%SZ")  - timedelta(minutes=30)
+						#loop until pregame
+						self.log.info(datetime.utcnow())
+						self.log.info(game_utc)
+						if datetime.utcnow() >= pregame_time:
+							self.log.info("Pregame!")
+							away_wins = game.away_team_wins
+							home_wins = game.home_team_wins
+							break
+						min = datetime.now().minute
+						second = datetime.now().second
+						sleep = ((15 - (min % 15)) * 60) - second
+						self.log.info("Still good but not pregame yet. Sleeping for 15min (or until next 15th min)...")
+						await asyncio.sleep(sleep)
+					else:
+						self.log.info("Game is not today. Sleeping until 3am...")
+						now = datetime.now()
+						to = (now + timedelta(days = 1)).replace(hour=3, minute=0, second=0)
+						#self.log.info(now, to)
+						await asyncio.sleep((to - now).total_seconds())
+						await game.refresh()
 
-					#loop until pregame
-					self.log.info(datetime.utcnow())
-					self.log.info(utc)
-					if datetime.utcnow() >= pg:
-						self.log.info("Pregame!")
-						break
-					min = datetime.now().minute
-					second = datetime.now().second
-					sleep = ((15 - (min % 15)) * 60) - second
-					self.log.info("Still good but not pregame yet. Sleeping for 15min (or until next 15th min)...")
-					await asyncio.sleep(sleep)
+						# check if next game is the same
+						if schedule.get_next_game() != game:
+							go = False
+							break
+						
 				except Exception as e:
 					self.log.error(e)
 					self.log.info("Error getting game info. Sleeping for 5min...")
 					await asyncio.sleep(300)
+				finally:
+					await game.refresh()
 
 			if go:
 				open_channels = []
@@ -221,135 +245,129 @@ class GameChannel(object):
 						channel, role, open = await self.check_perms(int(channel_id), int(role))
 						if not open:
 							open_channels.append([channel, role])
-				if game_info['gameState'] != "OFF":# and "In Progress" not in game_info['status']['detailedState']:
+				if not game.is_final and not game.is_ppd and not game.is_cancelled:
 					if open_channels:
-						away_id = game_info['awayTeam']['id']
-						if away_id == 1:
-							playing_against = game_info['homeTeam']['name']['default']
+						if away.id == 1:
+							playing_against = home.full_name
 						else:
-							playing_against = game_info['awayTeam']['name']['default']
+							playing_against = away.full_name
 						#open chats
 						self.log.info("Opening game channels.")
-						for o in open_channels:
-							wt = asyncio.ensure_future(self.open_channel(o[0], o[1]))
+						for channel in open_channels:
+							wt = asyncio.ensure_future(self.open_channel(channel[0], channel[1]))
 							worker_tasks.append(wt)
-							wt = asyncio.ensure_future(self.send_message(o[0], OPEN_MSG.format(playing_against)))
+							wt = asyncio.ensure_future(self.send_message(channel[0], OPEN_MSG.format(playing_against)))
 							worker_tasks.append(wt)
 
-						results = await asyncio.gather(*worker_tasks)
+						await asyncio.gather(*worker_tasks)
 
 				#monitor the game
-				await self.monitor_game(game_info['id'])
+				await self.monitor_game(game)
 
 				#game over
-				self.log.info("Sending closing warning...")
-				worker_tasks = []
-				for channel_id in await self.cfg.get_channels('GameChannels'):
-					wt = asyncio.ensure_future(self.send_message(int(channel_id), CLOSING_MSG))
-					worker_tasks.append(wt)
-
-				results = await asyncio.gather(*worker_tasks)
-
-				await asyncio.sleep(CLOSING_TIME*60)
-
-				self.log.info("Closing game channels.")
-				worker_tasks = []
+				# check if chat is still open
+				open_channels = []
 				for channel_id in await self.cfg.get_channels('GameChannels'):
 					for role in await self.cfg.get_roles('GameChannels'):
-						wt = asyncio.ensure_future(self.close_channel(int(channel_id), int(role)))
+						channel, role, open = await self.check_perms(int(channel_id), int(role))
+						if open:
+							open_channels.append([channel, role])
+				
+				if open_channels:
+					self.log.info("Sending closing warning...")
+					worker_tasks = []
+					for channel in open_channels:
+						wt = asyncio.ensure_future(self.send_message(channel[0], CLOSING_MSG))
 						worker_tasks.append(wt)
 
-				results = await asyncio.gather(*worker_tasks)
+					await asyncio.gather(*worker_tasks)
 
-				is_game, game_info = await hockey.next_game()
-				#notOver = True
+					await asyncio.sleep(CLOSING_TIME*60)
 
-				if is_game:
-					# check if postseason
-					"""if game_info['gameType'] == 'P':
-						# check if the Devils lost or won the series
-						# first check if the devils won the game
-						if game_info['teams']['away']['team']['id'] == 1:
-							if game_info['teams']['away']['score'] > game_info['teams']['home']['score']:
-								devils_win = True
+					self.log.info("Closing game channels.")
+					worker_tasks = []
+					for channel in open_channels:
+						wt = asyncio.ensure_future(self.close_channel(channel[0].id, channel[1].id))
+						worker_tasks.append(wt)
+
+					await asyncio.gather(*worker_tasks)
+
+				game = await schedule.get_next_game()
+
+				if game:
+					post_next_game = True
+					# check if playoffs and if so, how many wins the Devils have
+					if game.is_playoffs:
+						# get the game winner
+						winner = game.winning_team
+
+						if winner.id == 1:
+							# determine if devils are home or away
+							if game.away_team.id == 1:
+								num_wins = away_wins + 1
 							else:
-								devils_win = False
+								num_wins = home_wins + 1
+
+							if num_wins == 4:
+								message = CLOSE_MSG.format('The Devils have won the series!\nSee you next round!')
+								post_next_game = False
 						else:
-							if game_info['teams']['home']['score'] > game_info['teams']['away']['score']:
-								devils_win = True
+							if game.away_team.id == 1:
+								num_wins = home_wins + 1
 							else:
-								devils_win = False
+								num_wins = away_wins + 1
 
-						if not devils_win:
-							# then check how many wins the other team has
-							if game_info['teams']['away']['team']['id'] == 1:
-								other_wins = game_info['teams']['home']['leagueRecord']['wins']
-							else:
-								other_wins = game_info['teams']['away']['leagueRecord']['wins']
-							
-							# if the other team has a modolo of 4 wins, the series is over
-							if other_wins+1 % 4 == 0:
-								notOver = False
-								message = CLOSE_MSG.format('The Devils have lost the series. :(\nSee you next season!')
+							if num_wins == 4:
+								message = CLOSE_MSG.format('The Devils have been eliminated.\nSee you next season!')
+								post_next_game = False
+					
+					if post_next_game:
+						game_time = game.raw_game_time
+						epoch_obj = game_time.astimezone(timezone('US/Eastern'))
+						away = await game.get_away_team()
+						home = await game.get_home_team()
+
+						epoch = int(epoch_obj.timestamp())
+						game_time = f"<t:{epoch}:t> on <t:{epoch}:D>"
+						if away.id == 1:
+							game_msg = f"at the **{home.full_name}**"
 						else:
-							# if the devils won, check how many wins they have
-							if game_info['teams']['away']['team']['id'] == 1:
-								devils_wins = game_info['teams']['away']['leagueRecord']['wins']
-							else:
-								devils_wins = game_info['teams']['home']['leagueRecord']['wins']
+							game_msg = f"against the **{away.full_name}**"
 
-							# if the devils have a modolo of 4 wins, the series is over
-							if devils_wins+1 % 4 == 0:
-								notOver = False
-								message = CLOSE_MSG.format('The Devils have won the series! :)\nSee you next round!')"""
-						
-
-					#if notOver:
-					utctz = timezone('UTC')
-					time = game_info['startTimeUTC']
-					utc = datetime.strptime(time, "%Y-%m-%dT%H:%M:%SZ")
-					utc2 = utctz.localize(utc)
-					est = utc2.astimezone(timezone('US/Eastern'))
-					#time = datetime.strftime(est,  "%-I:%M %p on %B %-d, %Y")
-
-					epoch = int(est.timestamp())
-					time = f"<t:{epoch}:t> on <t:{epoch}:D>"
-					if game_info['awayTeam']['id'] == 1:
-						game_msg = f"at the **{game_info['homeTeam']['name']['default']}**"
-					else:
-						game_msg = f"against the **{game_info['awayTeam']['name']['default']}**"
-
-					message = CLOSE_MSG.format(f"Join us again when we're playing {game_msg} @{time} next!")
+						message = CLOSE_MSG.format(f"Join us again when we're playing {game_msg} @{game_time} next!")
 				else:
 					# check if postseason and if so, how many wins the Devils have
-					"""is_game, game_info = await hockey.get_game(pk)
-					
-					# check if postseason
-					if game_info['gameType'] == 'P':
-						# check if the Devils won
-						if game_info['teams']['away']['team']['id'] == 1:
-							wins = game_info['teams']['away']['leagueRecord']['wins']
-						else:
-							wins = game_info['teams']['home']['leagueRecord']['wins']
-						
-						# check if the Devils won the series
-						if wins % 4 == 0:
-							message = CLOSE_MSG.format('The Devils have won the series! :D\nSee you next round!')
-						else:
-							# maybe the api is just slow
-							# check if the Devils won today's game
-							if game_info['teams']['away']['team']['id'] == 1:
-								if game_info['teams']['away']['score'] > game_info['teams']['home']['score']:
-									message = CLOSE_MSG.format('The Devils have won the series! :D\nSee you next round!')
-								else:
-									message = CLOSE_MSG.format('The Devils have lost the series. :(\nSee you next season!')
+					if game.is_playoffs:
+						# get the game winner
+						winner = game.winning_team
 
-					else:"""
-					message = CLOSE_MSG.format(':(\nSee you next season!')
+						if winner.id == 1:
+							# determine if devils are home or away
+							if game.away_team.id == 1:
+								num_wins = game.away_team_wins
+							else:
+								num_wins = game.home_team_wins
+
+							if num_wins == 4:
+								message = CLOSE_MSG.format('The Devils have won the series!\nSee you next round!')
+							else:
+								message = CLOSE_MSG.format('This API is confusing! At least we won!\nSee you next game!')
+						else:
+							if game.away_team.id == 1:
+								num_wins = game.home_team_wins
+							else:
+								num_wins = game.away_team_wins
+
+							if num_wins == 4:
+								message = CLOSE_MSG.format('The Devils have been eliminated.\nSee you next season!')
+							else:
+								message = CLOSE_MSG.format('This API is confusing! We\'ll get em next time!\nSee you next game!')
+					else:
+						message = CLOSE_MSG.format(':(\nSee you next season!')
 
 				worker_tasks = []
 				for channel_id in await self.cfg.get_channels('GameChannels'):
 					wt = asyncio.ensure_future(self.send_message(int(channel_id), message))
 					worker_tasks.append(wt)
 
-				results = await asyncio.gather(*worker_tasks)
+				await asyncio.gather(*worker_tasks)

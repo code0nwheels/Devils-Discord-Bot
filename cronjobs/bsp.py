@@ -3,9 +3,14 @@ import asyncio
 import os
 import requests
 
-# get token from file
-with open('../token', 'r') as f:
-    token = f.read()
+from dotenv import load_dotenv
+
+load_dotenv()
+try:
+    token = os.getenv("DISCORD_API_KEY")
+except:
+    print("No token found. Please create a .env file with the token.")
+    exit()
 
 class BanSpyPet(object):
     """docstring for BanSpyPet."""
