@@ -103,6 +103,8 @@ class Pickems(commands.Cog):
             for game_data in self.schedule.schedule:
                 games.append(await Game.init(game_data['id']))
 
+        games = [game for game in games if game.is_regular_season]
+
         self.log.info(f"Found {len(games)} games.")
 
         for game in games:
