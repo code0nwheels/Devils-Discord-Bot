@@ -3,9 +3,6 @@ import discord
 from util import settings
 from discord.ext import commands
 
-from background.gamechannel import GameChannel
-from database.database import Database
-
 import logging
 from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
