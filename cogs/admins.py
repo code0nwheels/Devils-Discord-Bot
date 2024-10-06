@@ -671,9 +671,12 @@ class Admins(commands.Cog):
 	@discord.commands.option('cog', description='Enter the cog to reload')
 	async def reloadcog(self, ctx, cog: str):
 		self.log.info(f"{ctx.author} is reloading cog {cog}")
-
+		
 		try:
-			self.bot.reload_extension(f'cogs.{cog}')
+			extensions = set(self.bot.extensions.keys())
+			for extension in extensions:
+				if cog in extension:
+					self.bot.reload_extension(extension)
 			await ctx.respond(f"Cog {cog} reloaded!")
 		except Exception as e:
 			self.log.exception("Error reloading cog")

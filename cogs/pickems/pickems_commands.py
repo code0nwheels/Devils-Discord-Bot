@@ -2,6 +2,7 @@
 import os
 import discord
 from discord.ext import commands
+from discord.utils import get
 
 from datetime import datetime
 
@@ -115,6 +116,18 @@ class PickemsCommands(commands.Cog):
     async def get_picks_error(self, ctx, error):
         self.log.exception(f"Error in get_picks: {error}")
         await ctx.respond("An error occurred", ephemeral=True)
+
+    # command to post the leaderboard (admin only)
+    @commands.slash_command(guild_ids=[guild_id], name="post_leaderboard", description="Post the leaderboard")
+    @commands.has_permissions(administrator=True)
+    @discord.default_permissions(administrator=True)
+    async def post_leaderboard(self, ctx):
+        self.log.info(f"post_leaderboard called by {ctx.author.name} in {ctx.guild.name}")
+        # find channel by name
+        channel = get(self.bot.get_all_channels(), name='leaderboard')
+        await leaderboard.post_leaderboard(channel)
+
+        await ctx.respond("Leaderboard posted", ephemeral=True)
 
 # add the cog to the bot
 def setup(bot):
