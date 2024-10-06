@@ -107,26 +107,28 @@ class Pickems(commands.Cog):
 
         self.log.info(f"Found {len(games)} games.")
 
-        for game in games:
-            self.log.info(f"Checking game {game.game_id}")
-            if game.is_regular_season:
-                channel = get(self.bot.get_all_channels(), name='daily-pickems')
-                message_id = await self.db.get_message(game.game_id)
-                view = GameView(game)
+        if games:
+            for game in games:
+                self.log.info(f"Checking game {game.game_id}")
+                if game.is_regular_season:
+                    channel = get(self.bot.get_all_channels(), name='daily-pickems')
+                    message_id = await self.db.get_message(game.game_id)
+                    view = GameView(game)
 
-                if not message_id:
-                    game_id = game.game_id
-                    embed = await create_embed.create_pickems_game(game)
-                    message_id = await self.post_game(channel.id, embed, view)
-                    if message_id is None:
-                        continue
-                    await self.db.create_message(message_id, game_id)
+                    if not message_id:
+                        game_id = game.game_id
+                        embed = await create_embed.create_pickems_game(game)
+                        message_id = await self.post_game(channel.id, embed, view)
+                        if message_id is None:
+                            continue
+                        await self.db.create_message(message_id, game_id)
 
-                self.bot.add_view(view, message_id=int(message_id.split('-')[1]))
+                    self.bot.add_view(view, message_id=int(message_id.split('-')[1]))
 
-        await self.monitor_games(games)
+            await self.monitor_games(games)
 
         # sleep until 3am ET
+        self.log.info("Sleeping until 3am ET")
         now = datetime.now(pytz.timezone('US/Eastern'))
         if now.hour > 3:
             sleep_time = 60*(60*(27 - now.hour) - now.minute) - now.second
