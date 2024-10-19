@@ -112,6 +112,7 @@ class Devils(commands.Cog):
 			game_info = await schedule.get_schedule(num_games) if num_games > 1 else [await schedule.get_next_game()]
 
 			game_info = [g for g in game_info if g and not (g.is_final or g.is_ppd or g.is_cancelled)]
+			self.log.info(f"Game info: {game_info}")
 			if game_info:
 				await self._get_x_games(ctx, num_games, game_info)
 			else:

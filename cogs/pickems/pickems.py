@@ -58,7 +58,7 @@ class Pickems(commands.Cog):
 
                 now = datetime.now(pytz.timezone('UTC'))
 
-                if now >= game.raw_game_time or game.is_live or game.is_ppd:
+                if now >= game.raw_game_time or game.is_live or game.is_ppd or game.is_final:
                     message_id = await self.db.get_message(game.game_id)
                     if not message_id:
                         self.log.error(f"Game {game.game_id} is live but no message id found in db.")
@@ -76,6 +76,9 @@ class Pickems(commands.Cog):
                         self.log.info(f"Disabling buttons for game {game.game_id}")
                         view = GameView(game, disabled=True)
                         await message.edit(view=view)
+                        locked_games.append(game.game_id)
+                    elif game.game_id not in locked_games:
+                        self.log.info(f"{game.game_id} not in locked games")
                         locked_games.append(game.game_id)
                 
                 if len(locked_games) == len(games):

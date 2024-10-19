@@ -65,8 +65,11 @@ class Schedule:
         """
         games = []
         if number_of_games:
-            for game in self.schedule[:number_of_games]:
-                games.append(await Game.init(game['id']))
+            for game in self.schedule:
+                if game['gameState'] not in ['FINAL', 'OFF', 'OVER']:
+                    games.append(await Game.init(game['id']))
+                if len(games) == number_of_games:
+                    break
         else:
             for game in self.schedule:
                 games.append(await Game.init(game['id']))
