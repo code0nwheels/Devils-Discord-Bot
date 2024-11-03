@@ -168,7 +168,7 @@ class Devils(commands.Cog):
 										  ["Violation", "Content", "URL"], 
 										  [violation, message_obj.content, f"[Click here to view]({message_obj.jump_url})"],
 										  f"Reported by {ctx.author} ({ctx.author.id})")
-		admin_role = get(ctx.guild.roles, name="Admins")
+		admin_role = get(ctx.guild.roles, name="Administrator")
 		view = report_view.ReportView(message_obj)
 		await channel.send(admin_role.mention, embed=embed, view=view)
 		self.bot.add_view(view)
@@ -189,7 +189,7 @@ class Devils(commands.Cog):
 
 		thread = await modmail_chan.create_thread(name=f"{ctx.author.name.lower()}-{len(modmail_chan.threads) + len(await modmail_chan.archived_threads().flatten()) + 1}")
 		embed = await create_embed.create(f'{ctx.author} ({ctx.author.id})', f"Needs help.", ["Description"], [brief_description], "")
-		admin_role = get(ctx.guild.roles, name="Admins")
+		admin_role = get(ctx.guild.roles, name="Administrator")
 		await thread.send(f"{ctx.author.mention} {admin_role.mention}", embed=embed)
 		await ctx.respond(f"Thank you! I have notified the team. Your thread is {thread.mention}", ephemeral=True)
 

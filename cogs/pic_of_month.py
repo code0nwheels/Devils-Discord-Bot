@@ -6,12 +6,25 @@ import discord
 from discord.ext import tasks, commands
 from discord.utils import get
 
+import logging
+from logging.handlers import RotatingFileHandler
+
 class PicOfMonth(commands.Cog):
     def __init__(self, bot: discord.Bot):
         print('PicOfMonth Cog Loaded')
         self.bot = bot
+        
+        self.log = logging.getLogger(__name__)
+        handler = RotatingFileHandler('log/picofmonth.log', maxBytes=5*1024*1024, backupCount=5)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.log.addHandler(handler)
 
         self.pic_of_month.start()
+        
+    def cog_unload(self):
+        self.pic_of_month.cancel()
+        self.log.info("PicOfMonth Cog Unloaded")
 
     @tasks.loop(time=time(hour=4, minute=0, tzinfo=timezone.utc))
     async def pic_of_month(self):
@@ -56,8 +69,7 @@ class PicOfMonth(commands.Cog):
             channel = get(self.bot.get_all_channels(), name=channel_name)
             reaction_count = {}
             
-            async for message in channel.history(after=first_day_prev_month_utc, before=last_day_prev_month_utc):
-                # check if message has an attachment
+            async for message in channel.history(after=first_day_prev_month_utc, before=last_day_prev_month_utc, oldest_first=True, limit=None):# check if message has an attachment
                 if len(message.attachments) == 0 and len(message.embeds) == 0:
                     continue
                 
@@ -73,8 +85,10 @@ class PicOfMonth(commands.Cog):
                         break
 
             # get the message with the most star reactions
+            self.log.info(f"Reaction count: {reaction_count},channel: {channel_name}")
             max_reaction = max(reaction_count, key=reaction_count.get)
             message = await channel.fetch_message(max_reaction)
+            self.log.info(f"Message: {message.id}")
             await message.channel.send(congrats_message.format(message.author))
             await message.pin()
     
