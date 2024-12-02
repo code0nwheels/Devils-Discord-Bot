@@ -24,6 +24,10 @@ class PostLeaderboard(commands.Cog):
         self.run.start()
         self.log.info("Leaderboard initialized.")
 
+    def cog_unload(self):
+        self.run.cancel()
+        self.log.info("PostLeaderboard unloaded.")
+
     @tasks.loop(time=time(hour=8, minute=30, tzinfo=timezone.utc))
     async def run(self):
         # loop indefinitely

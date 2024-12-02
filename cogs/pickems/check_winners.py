@@ -25,6 +25,10 @@ class CheckWinners(commands.Cog):
         self.log.addHandler(handler)
 
         self.run.start()
+    
+    def cog_unload(self):
+        self.run.cancel()
+        self.log.info("Pickems unloaded.")
 
     async def get_picked_teams(self, date=None):
         user_picks = {}

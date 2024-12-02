@@ -1,3 +1,7 @@
 
 .env
 bryce.service
+cogs/__pycache__/admins.cpython-39.pyc
+cogs/__pycache__/devils.cpython-39.pyc
+/cogs/__pycache__
+*.pyc

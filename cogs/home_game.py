@@ -25,6 +25,10 @@ class Home_Game(commands.Cog):
 
         self.home_game.start()
         self.log.info("Home_Game initialized.")
+    
+    def cog_unload(self):
+        self.home_game.cancel()
+        self.log.info("Home_Game Cog Unloaded")
 
     @tasks.loop(time=time(hour=7, minute=0, tzinfo=timezone.utc))
     async def home_game(self):
@@ -38,18 +42,21 @@ class Home_Game(commands.Cog):
                 # not dst. wait an hour
                 await asyncio.sleep(3600)
 
-            schedule = Schedule()
+            schedule = Schedule(datetime.now().strftime("%Y-%m-%d"))
             await schedule.fetch_team_schedule("njd")
 
             # get game data
-            game = await schedule.get_next_game()
+            game = await schedule.get_game()
 
-            if not game or not game.is_today:
+            if not game:
+                self.log.info("No game today")
+                self.log.info(f"Game: {game}")
                 return
 
             home = await game.get_home_team()
 
             if home.id != 1:
+                self.log.info("Game is not at home")
                 return # game is not at home
             else:
                 away_team = await game.get_away_team()

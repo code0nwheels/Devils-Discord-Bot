@@ -214,7 +214,7 @@ class Admins(commands.Cog):
 	@discord.default_permissions(administrator=True)
 	async def getconfig(self, ctx):
 		self.log.info(f"{ctx.author} is getting config")
-		names = ["Game Channels", "Game Channels Role", "Highlight Channels", "ModMail Channel", "Social Media Channels", "Four Twenty Channels", "Banished Roles"]
+		names = ["Game Channels", "Game Channels Role", "Highlight Channels", "ModMail Channel", "Social Media Channels", "Four Twenty Channels", "Banished Roles", "Meetup Channels"]
 
 		gc = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('GameChannels')) if await self.cfg.get_channels('GameChannels') else 'None'
 		gr = ', '.join(f"<@&{r}>" for r in await self.cfg.get_roles('GameChannels')) if await self.cfg.get_roles('GameChannels') else 'None'
@@ -223,8 +223,9 @@ class Admins(commands.Cog):
 		smf = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('SocialMediaChannels')) if await self.cfg.get_channels('SocialMediaChannels') else 'None'
 		ft = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('FourTwentyChannels')) if await self.cfg.get_channels('FourTwentyChannels') else 'None'
 		br = ', '.join(f"<@&{r}>" for r in await self.cfg.get_roles('BanishedRole')) if await self.cfg.get_roles('BanishedRole') else 'None'
+		mt = ', '.join(f"<#{ch}>" for ch in await self.cfg.get_channels('MeetupChannels')) if await self.cfg.get_channels('MeetupChannels') else 'None'
 
-		values = [gc, gr, hc, mmc, smf, ft, br]
+		values = [gc, gr, hc, mmc, smf, ft, br, mt]
 
 		embed = await create_embed.create('Config', "Bot's settings", names, values, f"/getconfig")
 
