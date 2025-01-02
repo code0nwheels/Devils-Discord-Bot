@@ -40,7 +40,7 @@ class PicOfMonth(commands.Cog):
             reaction_count = {}
             channels = ['food-topia', 'nature-talk']
             winner_roles = [1310645896010268672, 1310646176701354094]
-            congrats_message = "Congratulations {0.mention}! Your message has been selected as the picture of the month! 🎉🎉🎉\n[Click here to view]({1.url})"
+            congrats_message = "Congratulations {0.mention}! Your message has been selected as the picture of the month! 🎉🎉🎉\n[Click here to view]({1.jump_url})"
 
             # get all messages in channel from last month
             today = date.today()
