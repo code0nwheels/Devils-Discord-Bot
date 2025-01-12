@@ -16,6 +16,10 @@ class Shiny(commands.Cog):
 
         self.shiny.start()
 
+    def cog_unload(self):
+        self.shiny.cancel()
+        print('Shiny Cog Unloaded')
+
     @tasks.loop(time=time(hour=19, minute=15, tzinfo=timezone.utc))
     async def shiny(self):
         # check if sunday
