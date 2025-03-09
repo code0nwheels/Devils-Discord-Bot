@@ -14,7 +14,7 @@ async def open_channel(bot, message=None):
             channel = bot.get_channel(int(channel_id))
             role = get(bot.guilds[0].roles, id=role_id)
             if role in channel.overwrites:
-                if channel.overwrites[role].send_messages == True:
+                if channel.overwrites[role].send_messages:
                     continue
             await channel.set_permissions(role, send_messages=True,
                                           view_channel=True)
@@ -33,10 +33,8 @@ async def close_channel(bot, message=None):
             channel = bot.get_channel(int(channel_id))
             role = get(bot.guilds[0].roles, id=role_id)
             if role in channel.overwrites:
-                if channel.overwrites[role].send_messages == False:
-                    continue
-            
-                await channel.set_permissions(role, send_messages=False,
+                if channel.overwrites[role].send_messages:
+                    await channel.set_permissions(role, send_messages=False,
                                               view_channel=True)
                 if not message:
                     await channel.send("Game chat is now closed!")
@@ -79,3 +77,18 @@ async def update_description_and_status(bot, game: Game) -> None:
         
         for category in categories:
             await category.edit(name=channel_category_name)
+
+async def is_closed(bot):
+    settings = Settings()
+    channel_ids = await settings.get_channels("GameChannels")
+    role_ids = await settings.get_roles("GameChannels")
+
+    for channel_id in channel_ids:
+        for role_id in role_ids:
+            channel = bot.get_channel(int(channel_id))
+            role = get(bot.guilds[0].roles, id=role_id)
+            if role in channel.overwrites:
+                if channel.overwrites[role].send_messages:
+                    return False
+    
+    return True

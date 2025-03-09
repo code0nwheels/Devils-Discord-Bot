@@ -15,7 +15,9 @@ from discord.ext import tasks, commands
 import asyncio
 
 from datetime import time, timezone, datetime
-import pytz
+import zoneinfo
+
+eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class Pickems(commands.Cog):
     def __init__(self, bot):
@@ -56,7 +58,7 @@ class Pickems(commands.Cog):
 
                 await game.refresh()
 
-                now = datetime.now(pytz.timezone('UTC'))
+                now = datetime.now(zoneinfo.ZoneInfo("UTC"))
 
                 if now >= game.raw_game_time or game.is_live or game.is_ppd or game.is_final:
                     message_id = await self.db.get_message(game.game_id)
@@ -91,7 +93,7 @@ class Pickems(commands.Cog):
 
     @tasks.loop(minutes=1)
     async def run(self):
-        now = datetime.now(pytz.timezone('US/Eastern'))
+        now = datetime.now(eastern)
         if now.hour < 3:
             # sleep until 3am ET
             sleep_time = 60*(60*(3 - now.hour) - now.minute) - now.second
@@ -132,7 +134,7 @@ class Pickems(commands.Cog):
 
         # sleep until 3am ET
         self.log.info("Sleeping until 3am ET")
-        now = datetime.now(pytz.timezone('US/Eastern'))
+        now = datetime.now(eastern)
         if now.hour > 3:
             sleep_time = 60*(60*(27 - now.hour) - now.minute) - now.second
         else:

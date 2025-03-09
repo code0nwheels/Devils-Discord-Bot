@@ -1,5 +1,5 @@
 from datetime import time, timezone, datetime, timedelta, date
-import pytz
+import zoneinfo
 import asyncio
 
 import discord
@@ -8,6 +8,9 @@ from discord.utils import get
 
 import logging
 from logging.handlers import RotatingFileHandler
+
+# eastern
+eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class PicOfMonth(commands.Cog):
     def __init__(self, bot: discord.Bot):
@@ -26,16 +29,13 @@ class PicOfMonth(commands.Cog):
         self.pic_of_month.cancel()
         self.log.info("PicOfMonth Cog Unloaded")
 
-    @tasks.loop(time=time(hour=4, minute=0, tzinfo=timezone.utc))
+    @tasks.loop(time=time(hour=0, minute=0, tzinfo=eastern))
     async def pic_of_month(self):
         # check if first of month
         if datetime.now().day != 1:
+            self.log.info("Not the first of the month")
             return
-        # check if really 12:00 eastern time
-        now = datetime.now(pytz.timezone('US/Eastern'))
-        if now.hour != 0:
-            # not dst. wait an hour
-            await asyncio.sleep(3600)
+        
         try:
             reaction_count = {}
             channels = ['food-topia', 'nature-talk']
@@ -90,6 +90,11 @@ class PicOfMonth(commands.Cog):
 
                 # get the message with the most star reactions
                 self.log.info(f"Reaction count: {reaction_count},channel: {channel_name}")
+                if len(reaction_count) == 0:
+                    self.log.info(f"No reactions found in {channel_name}")
+                    await channel.send("No ⭐ reactions found :(")
+                    continue
+                
                 max_reaction = max(reaction_count, key=reaction_count.get)
                 message = await channel.fetch_message(max_reaction)
                 
