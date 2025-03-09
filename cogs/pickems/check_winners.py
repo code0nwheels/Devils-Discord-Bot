@@ -10,7 +10,9 @@ from logging.handlers import RotatingFileHandler
 from discord.ext import tasks, commands
 
 import asyncio
-import pytz
+import zoneinfo
+
+eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class CheckWinners(commands.Cog):
     def __init__(self, bot):
@@ -42,13 +44,9 @@ class CheckWinners(commands.Cog):
         
         return user_picks
     
-    @tasks.loop(time=time(hour=6, minute=0, tzinfo=timezone.utc))
+    @tasks.loop(time=time(hour=2, minute=0, tzinfo=eastern))
     async def run(self):
         try:
-            now = datetime.now(pytz.timezone('US/Eastern'))
-            if now.hour != 2:
-                await asyncio.sleep(3600)
-
             yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
             self.schedule.set_date(yesterday)
             await self.schedule.fetch_full_schedule()
@@ -62,7 +60,7 @@ class CheckWinners(commands.Cog):
                         await self.db.delete_picks(game.game_id)
 
             if games:
-                now = datetime.now(pytz.timezone('US/Eastern'))
+                now = datetime.now(eastern)
                 if now.month < 7 and now.month >= 1:
                     season = str(now.year - 1) +str(now.year)
                 else:

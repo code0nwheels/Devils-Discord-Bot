@@ -106,7 +106,7 @@ class Game:
         """
         if self.away_team_id == 59:
             return "Utah Hockey Club"
-        return self.game_object.get('awayTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
+        return self.game_object.get('awayTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('commonName', {}).get("default", "Unknown")
     
     @property
     def home_team_full_name(self) -> str:
@@ -115,21 +115,21 @@ class Game:
         """
         if self.home_team_id == 59:
             return "Utah Hockey Club"
-        return self.game_object.get('homeTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('homeTeam', {}).get('name', {}).get("default", "Unknown")
+        return self.game_object.get('homeTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('homeTeam', {}).get('commonName', {}).get("default", "Unknown")
     
     @property
     def away_team_name(self) -> str:
         """
         Get the away team's name.
         """
-        return self.game_object.get('awayTeam', {}).get('name', {}).get("default", "Unknown")
+        return self.game_object.get('awayTeam', {}).get('commonName', {}).get("default", "Unknown")
     
     @property
     def home_team_name(self) -> str:
         """
         Get the home team's name.
         """
-        return self.game_object.get('homeTeam', {}).get('name', {}).get("default", "Unknown")
+        return self.game_object.get('homeTeam', {}).get('commonName', {}).get("default", "Unknown")
     
     @property
     def away_team_id(self) -> int:

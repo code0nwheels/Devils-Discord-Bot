@@ -1,6 +1,5 @@
 from datetime import time, timezone, datetime
-import pytz
-import asyncio
+import zoneinfo
 
 import discord
 from discord.ext import tasks
@@ -10,6 +9,8 @@ from util import settings
 
 import logging
 from logging.handlers import RotatingFileHandler
+
+eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class Four_Twenty(commands.Cog):
     def __init__(self, bot: discord.Bot):
@@ -23,18 +24,15 @@ class Four_Twenty(commands.Cog):
 
         self.four_twenty.start()
         self.log.info("Four Twenty initialized.")
+        self.log.info(datetime.now())
 
-    @tasks.loop(time=time(hour=20, minute=20, tzinfo=timezone.utc))
+    @tasks.loop(time=time(hour=16, minute=20, tzinfo=eastern))
     async def four_twenty(self):
         try:
             channel_stg = await self.cfg.get_channels("FourTwentyChannels")
             if channel_stg is None:
                 return
-            # check if really 4:20 eastern time
-            now = datetime.now(pytz.timezone('US/Eastern'))
-            if now.hour != 16:
-                # not dst. wait an hour
-                await asyncio.sleep(3600)
+            
 
             channel = self.bot.get_channel(channel_stg[0])
             await channel.send("Toke up mofos!")

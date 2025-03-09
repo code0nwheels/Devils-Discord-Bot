@@ -1,13 +1,15 @@
 from discord.ext import commands, tasks
 from discord.utils import get
 from datetime import datetime, timezone, time
-import pytz
+import zoneinfo
 import asyncio
 
 from hockey.schedule import Schedule
 
 import logging
 from logging.handlers import RotatingFileHandler
+
+eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class GameDay(commands.Cog):
     def __init__(self, bot):
@@ -22,12 +24,8 @@ class GameDay(commands.Cog):
         self.check_game_day.start()
         self.log.info("GameDay initialized.")
 
-    @tasks.loop(time=time(hour=7, minute=0, tzinfo=timezone.utc))
+    @tasks.loop(time=time(hour=0, minute=0, tzinfo=eastern))
     async def check_game_day(self):
-        now = datetime.now(pytz.timezone('US/Eastern'))
-        if now.hour != 3:
-            await asyncio.sleep(3600)
-
         hockey_chat = get(self.bot.get_all_channels(), name="hockey-chat")
         game_chat = get(self.bot.get_all_channels(), name="game-chat")
         schedule = Schedule(datetime.now().strftime("%Y-%m-%d"))
@@ -36,7 +34,7 @@ class GameDay(commands.Cog):
 
         if game:
             self.log.info("Posting game day message")
-            game_time = game.raw_game_time.astimezone(pytz.timezone('US/Eastern')).timestamp()
+            game_time = game.raw_game_time.astimezone(eastern).timestamp()
             discord_epoch = f"<t:{int(game_time)}:t>"
 
             # send to both channels simultaneously

@@ -2,7 +2,7 @@ from hockey.schedule import Schedule
 from hockey.game import Game
 from util import settings
 
-import pytz
+import zoneinfo
 from discord.ext import commands, tasks
 
 import logging
@@ -102,7 +102,7 @@ class GameChannel(commands.Cog):
                     playing = next_game.home_team_full_name
                 else:
                     playing = next_game.away_team_full_name
-                next_game_datetime = str(next_game.raw_game_time.astimezone(pytz.timezone('US/Eastern')).timestamp())[:-2]
+                next_game_datetime = str(next_game.raw_game_time.astimezone(zoneinfo.ZoneInfo('US/Eastern')).timestamp())[:-2]
                 next_game_date = f"<t:{next_game_datetime}:d>"
                 next_game_time = f"<t:{next_game_datetime}:t>"
                 closing_message = f"Game chat is now closed. Join us again when we're playing the {playing} @{next_game_time} on {next_game_date} next!"
@@ -132,14 +132,15 @@ class GameChannel(commands.Cog):
             else:
                 closing_message = "Game chat is now closed. Enjoy the offseason!"
 
-        await game_channel.send_message(self.bot, CLOSE_DELAY_MESSAGE)
-        await asyncio.sleep(CLOSE_DELAY)
+        if not game_channel.is_closed(self.bot):
+            await game_channel.send_message(self.bot, CLOSE_DELAY_MESSAGE)
+            await asyncio.sleep(CLOSE_DELAY)
         await game_channel.close_channel(self.bot, closing_message)
 
     async def wait_until_ready(self, game: Game) -> bool:
         self.log.info(f"Waiting until ready for game {game.game_id}.")
         while True:
-            now = datetime.now(pytz.timezone('UTC'))
+            now = datetime.now(zoneinfo.ZoneInfo("UTC"))
             if now.minute % 30 == 0 or (now >= game.raw_pregame_time and not game.is_final and not game.is_ppd and not game.is_cancelled):
                 if now >= game.raw_pregame_time:
                     self.log.info("Game is ready to start.")
