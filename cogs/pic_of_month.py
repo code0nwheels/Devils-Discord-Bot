@@ -62,8 +62,8 @@ class PicOfMonth(commands.Cog):
             # Convert the dates to UTC datetime objects
             first_day_prev_month_utc = datetime.combine(first_day_prev_month, datetime.max.time())
             last_day_prev_month_utc = datetime.combine(last_day_prev_month, datetime.min.time())
-            first_day_prev_month_utc = first_day_prev_month_utc.astimezone(pytz.timezone('US/Eastern')).astimezone(pytz.utc)
-            last_day_prev_month_utc = last_day_prev_month_utc.astimezone(pytz.timezone('US/Eastern')).astimezone(pytz.utc)
+            first_day_prev_month_utc = first_day_prev_month_utc.astimezone(eastern).astimezone(timezone.utc)
+            last_day_prev_month_utc = last_day_prev_month_utc.astimezone(eastern).astimezone(timezone.utc)
             print(first_day_prev_month_utc, last_day_prev_month_utc)
 
             guild = await self.bot.fetch_guilds().flatten()

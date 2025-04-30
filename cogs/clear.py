@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import time, datetime, timedelta, timezone
 import zoneinfo
 import asyncio
 import discord
@@ -23,7 +23,16 @@ class Clear(commands.Cog):
         # Add channel sets to track progress
         self.processed_channels = set()  # Channels that are fully completed
         self.in_progress_channels = set()  # Channels currently being processed
-        self.pending_channels = set()  # Channels waiting to be processed
+        self.pending_channels = []  # Channels waiting to be processed - using list to maintain order
+        
+        # Track completion status
+        self.is_running = False
+        self.start_time = None
+        self.total_deleted = 0
+        self.deletion_stats = {}  # Author ID -> count
+        
+        # Category ID to skip
+        self.skip_category_id = 589507991674421259
         
         # Author IDs to target for message deletion
         self.author_ids = [240267442104827914, 1113953835686305823, 478699518653890560, 364425223388528651]
@@ -36,17 +45,22 @@ class Clear(commands.Cog):
             364425223388528651: ["pets", "admin-chat", "news-and-articles"],
         }
         
-        # Start the cleanup task
+        # Start the cleanup task and status check
         self.remove_old_messages.start()
+        self.check_completion_status.start()
         self.log.info("Clear Cog Loaded")
         
     def cog_unload(self):
         self.remove_old_messages.cancel()
+        self.check_completion_status.cancel()
         self.log.info('Clear Cog Unloaded')
     
-    @tasks.loop(hours=100)
+    @tasks.loop(time=time(hour=0, minute=0, second=0, tzinfo=eastern))
     async def remove_old_messages(self):
         """Main task to clear messages from specified authors"""
+        if datetime.now(eastern).day != 1:
+            return
+            
         try:
             # Wait until the bot is fully ready
             await self.bot.wait_until_ready()
@@ -84,67 +98,143 @@ class Clear(commands.Cog):
                 for author_id in self.author_ids:
                     user = guild.get_member(author_id) or self.bot.get_user(author_id)
                     self.user_names[author_id] = user.name if user else f"User:{author_id}"
+            
+            # Reset completion tracking
+            self.processed_channels.clear()
+            self.in_progress_channels.clear()
+            self.pending_channels.clear()
+            self.total_deleted = 0
+            self.deletion_stats = {author_id: 0 for author_id in self.author_ids}
                             
             # Start new batch of channels if none are in progress
-            if not hasattr(self, 'is_running') or not self.is_running:
-                self.log.info(f"Starting message cleanup for messages before {cutoff_time}")
+            if not self.is_running:
+                self.start_time = datetime.now()
+                self.is_running = True
+                self.log.info(f"Starting monthly message cleanup for messages before {cutoff_time}")
                 
-                # Create list of all channels that need processing
-                all_channels = []
+                # Process threads first
+                thread_count = len(guild.threads)
+                self.log.info(f"Found {thread_count} threads in guild")
+                
+                # Add all threads first (prioritize threads)
+                for thread in guild.threads:
+                    # Skip threads whose parent is in the excluded category
+                    if hasattr(thread.parent, 'category_id') and thread.parent.category_id == self.skip_category_id:
+                        self.log.info(f"Skipping thread {thread.name} (parent in excluded category)")
+                        continue
+                        
+                    # Add thread to pending list
+                    self.pending_channels.append(thread)
+                
+                # Then add all text channels
                 for channel in guild.text_channels:
-                    # Skip channels already processed
-                    if channel.id in self.processed_channels:
+                    # Skip channels in the excluded category
+                    if channel.category_id == self.skip_category_id:
+                        self.log.info(f"Skipping channel {channel.name} (in excluded category)")
                         continue
                         
                     # Check if at least one author needs processing in this channel
                     for author_id in self.author_ids:
                         if channel not in self.skip_channel_objects.get(author_id, []):
-                            all_channels.append(channel)
+                            self.pending_channels.append(channel)
                             break
                 
-                # Make this a set to avoid any potential duplicates
-                self.pending_channels = set(channel.id for channel in all_channels)
-                
                 # Log how many channels we're processing
-                self.log.info(f"Processing {len(self.pending_channels)} channels")
+                self.log.info(f"Processing {len(self.pending_channels)} channels/threads ({thread_count} threads, {len(self.pending_channels) - thread_count} channels)")
                 
-                # Mark as running and start the actual processing
-                self.is_running = True
-                
-                # Start processing 10 channels at once
-                for i in range(min(10, len(all_channels))):
-                    if i < len(all_channels):
-                        channel = all_channels[i]
-                        self.in_progress_channels.add(channel.id)
-                        self.pending_channels.discard(channel.id)
-                        
-                        asyncio.create_task(
-                            self.process_channel(
-                                channel=channel,
-                                author_ids=self.author_ids,
-                                skip_channels=self.skip_channel_objects,
-                                user_names=self.user_names,
-                                cutoff_time=cutoff_time,
-                                bulk_cutoff_time=bulk_cutoff_time
-                            )
-                        )
-            
-            # Otherwise, just log status
-            elif len(self.pending_channels) > 0 or len(self.in_progress_channels) > 0:
-                self.log.info(f"Status: {len(self.in_progress_channels)} channels in progress, {len(self.pending_channels)} pending, {len(self.processed_channels)} completed")
-            
-            # If everything is done, log completion
-            elif len(self.pending_channels) == 0 and len(self.in_progress_channels) == 0:
-                self.log.info(f"All channels processed! Cleaned {len(self.processed_channels)} channels.")
-                self.is_running = False
+                # Start filling slots
+                await self.fill_processing_slots()
                 
         except Exception as e:
             self.log.error(f"Error in message cleanup task: {str(e)}", exc_info=True)
     
+    @tasks.loop(minutes=1)
+    async def check_completion_status(self):
+        """Check if the cleanup process has completed"""
+        try:
+            if self.is_running:
+                # Check if we need to fill in any slots (should always have 10 running if possible)
+                if len(self.in_progress_channels) < 10 and self.pending_channels:
+                    self.log.info(f"Currently {len(self.in_progress_channels)} channels processing, filling slots...")
+                    await self.fill_processing_slots()
+                
+                # Otherwise, just log status if there are active or pending channels
+                elif self.pending_channels or len(self.in_progress_channels) > 0:
+                    self.log.info(f"Status: {len(self.in_progress_channels)} channels in progress, {len(self.pending_channels)} pending, {len(self.processed_channels)} completed")
+                
+                # If everything is done, log completion
+                elif not self.pending_channels and len(self.in_progress_channels) == 0:
+                    elapsed_time = datetime.now() - self.start_time
+                    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    
+                    # Format user stats for logging
+                    user_stats = []
+                    for author_id, count in self.deletion_stats.items():
+                        if count > 0:
+                            user_name = self.user_names.get(author_id, f"User:{author_id}")
+                            user_stats.append(f"{user_name}: {count}")
+                    
+                    if user_stats:
+                        user_summary = ", ".join(user_stats)
+                        self.log.info(f"🎉 MONTHLY CLEANUP COMPLETE! 🎉 Processed {len(self.processed_channels)} channels in {hours}h {minutes}m {seconds}s")
+                        self.log.info(f"Total messages deleted: {self.total_deleted} ({user_summary})")
+                    else:
+                        self.log.info(f"🎉 MONTHLY CLEANUP COMPLETE! 🎉 Processed {len(self.processed_channels)} channels in {hours}h {minutes}m {seconds}s")
+                        self.log.info(f"No messages were deleted.")
+                    
+                    # Reset running flag after completion
+                    self.is_running = False
+                    
+        except Exception as e:
+            self.log.error(f"Error checking completion status: {str(e)}", exc_info=True)
+    
+    async def fill_processing_slots(self):
+        """Fill available processing slots with pending channels"""
+        try:
+            # Maximum concurrent channels
+            max_concurrent = 10
+            
+            # Start new tasks up to the concurrency limit
+            slots_available = max_concurrent - len(self.in_progress_channels)
+            channels_to_start = min(slots_available, len(self.pending_channels))
+            
+            if channels_to_start > 0:
+                self.log.info(f"Starting {channels_to_start} new channel processors ({len(self.in_progress_channels)} already running)")
+                
+                for _ in range(channels_to_start):
+                    if not self.pending_channels:
+                        break
+                        
+                    channel = self.pending_channels.pop(0)
+                    self.in_progress_channels.add(channel.id)
+                    
+                    # Process this channel in the background
+                    asyncio.create_task(
+                        self.process_channel(
+                            channel=channel,
+                            author_ids=self.author_ids,
+                            skip_channels=self.skip_channel_objects,
+                            user_names=self.user_names,
+                            cutoff_time=datetime.now(eastern) - timedelta(days=3),  # Fresh cutoff time
+                            bulk_cutoff_time=datetime.now(timezone.utc) - timedelta(days=14)  # Fresh bulk cutoff
+                        )
+                    )
+                    
+                    if isinstance(channel, discord.Thread):
+                        self.log.info(f"Starting thread: {channel.name} (in #{channel.parent.name})")
+                    else:
+                        self.log.info(f"Starting channel: {channel.name}")
+        except Exception as e:
+            self.log.error(f"Error filling slots: {str(e)}", exc_info=True)
+    
     async def process_channel(self, channel, author_ids, skip_channels, user_names, cutoff_time, bulk_cutoff_time):
         """Process a single channel to delete messages from specified authors"""
         start_time = datetime.now()
-        self.log.info(f"Starting to process channel: {channel.name}")
+        if isinstance(channel, discord.Thread):
+            self.log.info(f"Starting to process thread: {channel.name} (in #{channel.parent.name})")
+        else:
+            self.log.info(f"Starting to process channel: {channel.name}")
         
         # Track deletion counts per user
         user_counts = {author_id: 0 for author_id in author_ids}
@@ -162,7 +252,10 @@ class Clear(commands.Cog):
                 # Log progress for large channels
                 if messages_processed % 1000 == 0:
                     elapsed = datetime.now() - start_time
-                    self.log.info(f"  Processed {messages_processed} messages in {channel.name} ({elapsed.total_seconds():.1f}s elapsed)")
+                    if isinstance(channel, discord.Thread):
+                        self.log.info(f"  Processed {messages_processed} messages in thread {channel.name} ({elapsed.total_seconds():.1f}s elapsed)")
+                    else:
+                        self.log.info(f"  Processed {messages_processed} messages in {channel.name} ({elapsed.total_seconds():.1f}s elapsed)")
                 
                 # Check if message author is in our target list
                 if message.author.id not in author_ids:
@@ -264,11 +357,23 @@ class Clear(commands.Cog):
             # Log channel completion
             total_deleted = sum(user_counts.values())
             elapsed_time = datetime.now() - start_time
+            
+            # Update global deletion stats
+            for author_id, count in user_counts.items():
+                if count > 0:
+                    self.deletion_stats[author_id] = self.deletion_stats.get(author_id, 0) + count
+                    self.total_deleted += count
+            
+            if isinstance(channel, discord.Thread):
+                channel_description = f"thread {channel.name} (in #{channel.parent.name})"
+            else:
+                channel_description = f"channel {channel.name}"
+                
             if total_deleted > 0:
                 user_summary = ", ".join([f"{user_names[uid]}: {count}" for uid, count in user_counts.items() if count > 0])
-                self.log.info(f"Completed {channel.name} in {elapsed_time.total_seconds():.1f}s: {total_deleted} messages deleted ({user_summary})")
+                self.log.info(f"Completed {channel_description} in {elapsed_time.total_seconds():.1f}s: {total_deleted} messages deleted ({user_summary})")
             else:
-                self.log.info(f"Completed {channel.name} in {elapsed_time.total_seconds():.1f}s: No messages deleted")
+                self.log.info(f"Completed {channel_description} in {elapsed_time.total_seconds():.1f}s: No messages deleted")
             
         except discord.errors.Forbidden:
             self.log.warning(f"No permission to access or delete messages in {channel.name}")
@@ -279,30 +384,9 @@ class Clear(commands.Cog):
             self.in_progress_channels.discard(channel.id)
             self.processed_channels.add(channel.id)
             
-            # If we have more channels to process, start a new one
+            # Try to fill slots again
             if self.pending_channels:
-                # Get a new channel to process
-                next_channel_id = next(iter(self.pending_channels))
-                self.pending_channels.discard(next_channel_id)
-                
-                # Find the channel object
-                next_channel = discord.utils.get(self.bot.get_all_channels(), id=next_channel_id)
-                if next_channel:
-                    self.in_progress_channels.add(next_channel.id)
-                    asyncio.create_task(
-                        self.process_channel(
-                            channel=next_channel,
-                            author_ids=self.author_ids,
-                            skip_channels=self.skip_channel_objects,
-                            user_names=self.user_names,
-                            cutoff_time=cutoff_time,
-                            bulk_cutoff_time=bulk_cutoff_time
-                        )
-                    )
-                    self.log.info(f"Starting next channel: {next_channel.name}")
-            
-            # Log progress
-            self.log.info(f"Channel sets updated: {len(self.in_progress_channels)} in progress, {len(self.pending_channels)} pending, {len(self.processed_channels)} completed")
+                await self.fill_processing_slots()
     
     async def _process_individual_deletes(self, delete_tasks, channel_name):
         """Helper to process a batch of individual message deletions"""
@@ -330,9 +414,14 @@ class Clear(commands.Cog):
         
         return 0
     
+    @check_completion_status.before_loop
     @remove_old_messages.before_loop
     async def before_cleanup(self):
         await self.bot.wait_until_ready()
+    
+    @check_completion_status.error
+    async def status_error(self, error):
+        self.log.error(f"Error in status check task: {str(error)}", exc_info=True)
     
     @remove_old_messages.error
     async def cleanup_error(self, error):

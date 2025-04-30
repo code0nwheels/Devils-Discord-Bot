@@ -22,7 +22,7 @@ class Shiny(commands.Cog):
         self.shiny.cancel()
         print('Shiny Cog Unloaded')
 
-    @tasks.loop(time=time(hour=3, minute=15, tzinfo=eastern))
+    @tasks.loop(time=time(hour=15, minute=15, tzinfo=eastern))
     async def shiny(self):
         # check if sunday
         if datetime.now().weekday() != 6:

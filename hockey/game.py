@@ -203,7 +203,7 @@ class Game:
         if self.is_regular_season:
             return self.game_object.get('awayTeam', {}).get('record', {})
         elif self.is_playoffs:
-            return self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('awayTeamWins', 0) + "-" + self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('homeTeamWins', 0)
+            return self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('awayTeamWins', "0") + "-" + self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('homeTeamWins', "0")
         else:
             return "0-0-0"
     
@@ -216,7 +216,7 @@ class Game:
         if self.is_regular_season:
             return self.game_object.get('homeTeam', {}).get('record', {})
         elif self.is_playoffs:
-            return self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('homeTeamWins', 0) + "-" + self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('awayTeamWins', 0)
+            return self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('homeTeamWins', "0") + "-" + self.game_object.get('summary', {}).get('seasonSeriesWins', {}).get('awayTeamWins', "0")
         else:
             return "0-0-0"
     

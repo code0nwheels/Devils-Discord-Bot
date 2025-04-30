@@ -49,8 +49,9 @@ class GameChannel(commands.Cog):
         self.current_game = await self.schedule.get_next_game()
         self.log.info(f"Fetched next game: {self.current_game}")
 
+        await game_channel.update_description_and_status(self.bot, self.current_game)
+
         if self.current_game:
-            await game_channel.update_description_and_status(self.bot, self.current_game)
             ready = await self.wait_until_ready(self.current_game)
             if not ready:
                 self.log.warning("Game was not ready in time.")

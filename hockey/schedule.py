@@ -87,7 +87,7 @@ class Schedule:
                         return await Game.init(game['id'])
                     else:
                         _game = await Game.init(game['id'])
-                        _game.set_round(game['seriesStatus'])['round']
+                        _game.set_round(game['seriesStatus']['round'])
                         return _game
             else:
                 if game['gameDate'] == self.date:
@@ -95,7 +95,7 @@ class Schedule:
                         return await Game.init(game['id'])
                     else:
                         _game = await Game.init(game['id'])
-                        _game.set_round(game['seriesStatus'])['round']
+                        _game.set_round(game['seriesStatus']['round'])
                         return _game
         return None
 
@@ -109,7 +109,7 @@ class Schedule:
                     return await Game.init(game['id'])
                 else:
                     _game = await Game.init(game['id'])
-                    _game.set_round(game['seriesStatus'])['round']
+                    _game.set_round(game['seriesStatus']['round'])
                     return _game
         return None
     
@@ -123,7 +123,7 @@ class Schedule:
                     return await Game.init(game['id'])
                 else:
                     _game = await Game.init(game['id'])
-                    _game.set_round(game['seriesStatus'])['round']
+                    _game.set_round(game['seriesStatus']['round'])
                     return _game
         return None
     
@@ -138,7 +138,7 @@ class Schedule:
                         return await Game.init(game['id'])
                     else:
                         _game = await Game.init(game['id'])
-                        _game.set_round(game['seriesStatus'])['round']
+                        _game.set_round(game['seriesStatus']['round'])
                         return _game
         return None
     
