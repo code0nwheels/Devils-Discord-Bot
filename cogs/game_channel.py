@@ -1,4 +1,4 @@
-from hockey.schedule import Schedule
+﻿from hockey.schedule import Schedule
 from hockey.game import Game
 from util import settings
 
@@ -130,13 +130,27 @@ class GameChannel(commands.Cog):
                     else:
                         if cur_game.home_team_wins + 1 >= 4:
                             closing_message = "Game chat is now closed. Better luck next time!"
+            else:                closing_message = "Game chat is now closed. Enjoy the offseason!"
+        
+        try:
+            is_closed = await game_channel.is_closed(self.bot)
+            self.log.info(f"Channel closed status before sending delay message: {is_closed}")
+            
+            if not is_closed:
+                self.log.info(f"Sending close delay message: '{CLOSE_DELAY_MESSAGE}'")
+                try:
+                    await game_channel.send_message(self.bot, CLOSE_DELAY_MESSAGE)
+                    self.log.info(f"Close delay message sent, sleeping for {CLOSE_DELAY} seconds")
+                    await asyncio.sleep(CLOSE_DELAY)
+                except Exception as e:
+                    self.log.error(f"Error sending delay message: {str(e)}", exc_info=True)
             else:
-                closing_message = "Game chat is now closed. Enjoy the offseason!"
-
-        if not game_channel.is_closed(self.bot):
-            await game_channel.send_message(self.bot, CLOSE_DELAY_MESSAGE)
-            await asyncio.sleep(CLOSE_DELAY)
-        await game_channel.close_channel(self.bot, closing_message)
+                self.log.warning("Channel appears to be already closed, skipping delay message")
+                
+            self.log.info(f"Closing channel with message: '{closing_message}'")
+            await game_channel.close_channel(self.bot, closing_message)
+        except Exception as e:
+            self.log.error(f"Exception in close_game_channel: {str(e)}", exc_info=True)
 
     async def wait_until_ready(self, game: Game) -> bool:
         self.log.info(f"Waiting until ready for game {game.game_id}.")

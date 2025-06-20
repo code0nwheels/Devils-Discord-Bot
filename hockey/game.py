@@ -104,8 +104,6 @@ class Game:
         """
         Get the away team's full name.
         """
-        if self.away_team_id == 59:
-            return "Utah Hockey Club"
         return self.game_object.get('awayTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('awayTeam', {}).get('commonName', {}).get("default", "Unknown")
     
     @property
@@ -113,8 +111,6 @@ class Game:
         """
         Get the home team's full name.
         """
-        if self.home_team_id == 59:
-            return "Utah Hockey Club"
         return self.game_object.get('homeTeam', {}).get('placeName', {}).get("default", "Unknown") + " " + self.game_object.get('homeTeam', {}).get('commonName', {}).get("default", "Unknown")
     
     @property

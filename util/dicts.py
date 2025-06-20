@@ -31,7 +31,8 @@ emoji_dict ={
     "53": "<:ArizonaCoyotes:901585073013411861>",
     "54": "<:VegasGoldenKnights:580095937565818893>",
     "55": "<:SeattleKraken:735964084826144770>",
-    "59": "<:nhlUtahHC:1252378314799190066>"
+    "59": "<:nhlUtahHC:1252378314799190066>",
+    "68": "<:nhlUtahMammoth:1369701534304047265>"
 }
 
 team_dict =	{
@@ -67,5 +68,6 @@ team_dict =	{
     "53": "Arizona Coyotes",
     "54": "Vegas Golden Knights",
     "55": "Seattle Kraken",
-    "59": "Utah Hockey Club"
+    "59": "Utah Hockey Club",
+    "68": "Utah Mammoth"
 }

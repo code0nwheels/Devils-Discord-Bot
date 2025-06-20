@@ -265,7 +265,7 @@ class Admins(commands.Cog):
 		except Exception as e:
 			self.log.exception("Error unbanishing")
 			if reply:
-				await ctx.respond("Could not update banishment in database. Someone fix manually!")
+				await ctx.respond("Could not update banishment in database. Someone fix manually.")
 
 		add_roles = []
 		roles = roles.split(',')

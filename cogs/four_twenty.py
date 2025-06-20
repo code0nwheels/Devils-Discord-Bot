@@ -26,6 +26,10 @@ class Four_Twenty(commands.Cog):
         self.log.info("Four Twenty initialized.")
         self.log.info(datetime.now())
 
+    def cog_unload(self):
+        self.run_tasks.cancel()
+        self.log.info("Four Twenty cog unloaded.")
+
     @tasks.loop(time=time(hour=16, minute=20, tzinfo=eastern))
     async def four_twenty(self):
         try:
