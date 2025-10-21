@@ -66,13 +66,13 @@ class GameView(View):
         if pick:
             if pick != team_id:
                 if await self.db.update_pick(user_id, game_id, team_id, est):
-                    await interaction.response.send_message(f"Pick updated to {team_name}!", ephemeral=True, delete_after=5)
+                    await interaction.response.send_message(f"Pick updated to {team_name}!", ephemeral=True, delete_after=30)
                 else:
-                    await interaction.response.send_message(f"Something went wrong! Try again in a few minutes.", ephemeral=True, delete_after=5)
+                    await interaction.response.send_message(f"Something went wrong! Try again in a few minutes.", ephemeral=True, delete_after=30)
             else:
-                await interaction.response.send_message(f"You already picked {team_name}!", ephemeral=True, delete_after=5)
+                await interaction.response.send_message(f"You already picked {team_name}!", ephemeral=True, delete_after=30)
         else:
             if await self.db.create_pick(user_id, game_id, team_id, season, est):
-                await interaction.response.send_message(f"You picked {team_name}!", ephemeral=True, delete_after=5)
+                await interaction.response.send_message(f"You picked {team_name}!", ephemeral=True, delete_after=30)
             else:
-                await interaction.response.send_message(f"Something went wrong! Try again in a few minutes.", ephemeral=True, delete_after=5)
+                await interaction.response.send_message(f"Something went wrong! Try again in a few minutes.", ephemeral=True, delete_after=30)
