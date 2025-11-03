@@ -549,7 +549,7 @@ class Admins(commands.Cog):
 			incidents = await self.db.get_incident(user_id)
 
 		incident_embeds = []
-		if len(incidents) > 0:
+		if incidents is not None and len(incidents) > 0:
 			for i in incidents:
 				incident_embeds.append(await create_embed.incident(i[0], i[1], i[2], i[3], i[4], i[5]))
 		else:
