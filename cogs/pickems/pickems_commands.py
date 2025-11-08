@@ -8,12 +8,10 @@ from datetime import datetime
 
 from util import create_embed, leaderboard
 from util.dicts import team_dict
+from util.logger import setup_logger
 from database.pickems_database import PickemsDatabase
 
 from dotenv import load_dotenv
-
-import logging
-from logging.handlers import RotatingFileHandler
 
 load_dotenv()
 guild_id = int(os.getenv('GUILD_ID'))
@@ -21,14 +19,8 @@ guild_id = int(os.getenv('GUILD_ID'))
 class PickemsCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
         self.db = PickemsDatabase()
-        logging.basicConfig(level=logging.INFO)
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/pickems_commands.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/pickems_commands.log')
 
     @commands.slash_command(guild_ids=[guild_id], name="get_leaderboard", description="Get the full leaderboard")
     @discord.commands.option(name="season", description="The season to get the leaderboard for (ex: 20242025). Omit for the current season.", required=False)

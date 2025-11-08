@@ -1,12 +1,9 @@
 import discord
 from discord.ext import commands, pages
 from util import create_embed
+from util.logger import setup_logger
 
 import os
-
-import logging
-from logging.handlers import RotatingFileHandler
-
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,17 +12,7 @@ guild_id = int(os.getenv('GUILD_ID'))
 class Help(commands.Cog):
 	def __init__(self, bot: commands.Bot):
 		self.bot = bot
-
-		logging.basicConfig(level=logging.INFO)
-		self.log = logging.getLogger(__name__)
-		# add a rotating handler
-		handler = RotatingFileHandler('log/help.log', maxBytes=5*1024*1024,
-									  backupCount=5)
-
-		# create a logging format
-		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-		handler.setFormatter(formatter)
-		self.log.addHandler(handler)
+		self.log = setup_logger(__name__, 'log/help.log')
 
 	async def create_embeds(self, commands_):
 		embeds = []

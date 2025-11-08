@@ -1,28 +1,15 @@
 import aiosqlite
 import os
 from dotenv import load_dotenv
-
 from datetime import datetime
-
-import logging
-from logging.handlers import RotatingFileHandler
+from util.logger import setup_logger
 
 class PickemsDatabase:
     def __init__(self):
         load_dotenv()
-
         self.pool = None
         self.conn = None
-        logging.basicConfig(level=logging.INFO)
-        self.log = logging.getLogger(__name__)
-        # add a rotating handler
-        handler = RotatingFileHandler('log/db.log', maxBytes=5*1024*1024,
-                                      backupCount=5)
-
-        # create a logging format
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/db.log')
 
     async def login(self):
         dbinfo = "database/" + os.getenv("PICKEMS_DB_NAME")

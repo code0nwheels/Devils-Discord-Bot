@@ -6,9 +6,7 @@ from discord.ext import tasks
 from discord.ext import commands
 
 from util import settings
-
-import logging
-from logging.handlers import RotatingFileHandler
+from util.logger import setup_logger
 
 eastern = zoneinfo.ZoneInfo("US/Eastern")
 
@@ -16,11 +14,7 @@ class Four_Twenty(commands.Cog):
     def __init__(self, bot: discord.Bot):
         self.bot = bot
         self.cfg = settings.Settings()
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/four_twenty.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/four_twenty.log')
 
         self.four_twenty.start()
         self.log.info("Four Twenty initialized.")

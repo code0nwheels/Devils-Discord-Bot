@@ -1,11 +1,9 @@
 from hockey.schedule import Schedule
 from hockey.game import Game
 from database.pickems_database import PickemsDatabase
+from util.logger import setup_logger
 
 from datetime import datetime, timedelta, timezone, time
-
-import logging
-from logging.handlers import RotatingFileHandler
 
 from discord.ext import tasks, commands
 
@@ -19,12 +17,7 @@ class CheckWinners(commands.Cog):
         self.bot = bot
         self.schedule = Schedule()
         self.db = PickemsDatabase()
-
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/check_winners.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/check_winners.log')
 
         self.run.start()
     

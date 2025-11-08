@@ -7,9 +7,7 @@ from discord.ext import tasks, commands
 
 from database import pickems_database
 from util import leaderboard
-
-import logging
-from logging.handlers import RotatingFileHandler
+from util.logger import setup_logger
 
 eastern = zoneinfo.ZoneInfo("US/Eastern")
 
@@ -17,11 +15,7 @@ class PostLeaderboard(commands.Cog):
     def __init__(self, bot) -> None:
         self.bot = bot
         self.db = pickems_database.PickemsDatabase()
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/leaderboard.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/leaderboard.log')
 
         self.run.start()
         self.log.info("Leaderboard initialized.")

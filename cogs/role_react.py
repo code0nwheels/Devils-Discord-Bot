@@ -3,21 +3,13 @@ from discord.ext import commands
 from discord.utils import get
 
 from util import settings
-
-import logging
-from logging.handlers import RotatingFileHandler
+from util.logger import setup_logger
 
 class RoleReact(commands.Cog):
 	def __init__(self, bot: commands.Bot):
 		self.bot = bot
 		self.cfg = settings.Settings()
-
-		logging.basicConfig(level=logging.INFO)
-		self.log = logging.getLogger(__name__)
-		handler = RotatingFileHandler('log/role_react.log', maxBytes=5*1024*1024, backupCount=5)
-		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-		handler.setFormatter(formatter)
-		self.log.addHandler(handler)
+		self.log = setup_logger(__name__, 'log/role_react.log')
 
 		self.log.info("RoleReact cog initialized.")
 
@@ -30,10 +22,6 @@ class RoleReact(commands.Cog):
 		if not messages_existing or f"{payload.channel_id}-{payload.message_id}" not in messages_existing:
 			return
 
-		"""good_roles = [518831246034599948, 842546366840569876, 437381518424408064, 384844284089729034, 364885679425060864]
-		has_role = any(role.id in good_roles for role in payload.member.roles)
-		if not has_role:
-			return"""
 		
 		if payload.emoji.name == '🎅':
 			# add role 781959166055022593 to user

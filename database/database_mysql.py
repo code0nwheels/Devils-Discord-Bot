@@ -1,24 +1,12 @@
 import aiomysql
 import os
-
-import logging
-from logging.handlers import RotatingFileHandler
-
 from dotenv import load_dotenv
+from util.logger import setup_logger
 
 class Database:
 	def __init__(self):
 		self.pool = None
-		logging.basicConfig(level=logging.INFO)
-		self.log = logging.getLogger(__name__)
-		# add a rotating handler
-		handler = RotatingFileHandler('log/db.log', maxBytes=5*1024*1024,
-									  backupCount=5)
-
-		# create a logging format
-		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-		handler.setFormatter(formatter)
-		self.log.addHandler(handler)
+		self.log = setup_logger(__name__, 'log/db.log')
 
 	async def login(self):
 		load_dotenv()

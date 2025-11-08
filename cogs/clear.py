@@ -3,22 +3,31 @@ import zoneinfo
 import asyncio
 import discord
 from discord.ext import tasks, commands
-import logging
-from logging.handlers import RotatingFileHandler
 
 eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class Clear(commands.Cog):
+    # Constants
+    SKIP_CATEGORY_ID = 589507991674421259
+    AUTHOR_IDS = [240267442104827914, 1113953835686305823, 478699518653890560, 364425223388528651]
+    SKIP_CHANNELS = {
+        240267442104827914: ["pets"],
+        1113953835686305823: ["pets", "news-and-articles"],
+        478699518653890560: [],
+        364425223388528651: ["pets", "admin-chat", "news-and-articles"],
+    }
+    BULK_DELETE_BATCH_SIZE = 100
+    INDIVIDUAL_DELETE_BATCH_SIZE = 25
+    BULK_DELETE_DAYS = 14
+    MESSAGE_CLEANUP_DAYS = 3
+    
     def __init__(self, bot: discord.Bot):
         print('Clear Cog Loaded')
         self.bot = bot
         
         # Setup logging with rotation
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/clear.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        from util.logger import setup_logger
+        self.log = setup_logger(__name__, 'log/clear.log')
         
         # Add channel sets to track progress
         self.processed_channels = set()  # Channels that are fully completed
@@ -30,20 +39,8 @@ class Clear(commands.Cog):
         self.start_time = None
         self.total_deleted = 0
         self.deletion_stats = {}  # Author ID -> count
-        
-        # Category ID to skip
-        self.skip_category_id = 589507991674421259
-        
-        # Author IDs to target for message deletion
-        self.author_ids = [240267442104827914, 1113953835686305823, 478699518653890560, 364425223388528651]
-        
-        # Channel names to skip for specific authors
-        self.skip_channels = {
-            240267442104827914: ["pets"],
-            1113953835686305823: ["pets", "news-and-articles"],
-            478699518653890560: [],
-            364425223388528651: ["pets", "admin-chat", "news-and-articles"],
-        }
+        self.skip_channel_objects = {}
+        self.user_names = {}
         
         # Start the cleanup task and status check
         self.remove_old_messages.start()
@@ -73,38 +70,25 @@ class Clear(commands.Cog):
             guild = self.bot.guilds[0]
             
             # Calculate cutoff time (3 days ago at midnight Eastern)
-            cutoff_time = datetime.now(eastern) - timedelta(days=3)
+            cutoff_time = datetime.now(eastern) - timedelta(days=self.MESSAGE_CLEANUP_DAYS)
             cutoff_time = cutoff_time.replace(hour=0, minute=0, second=0, microsecond=0)
             cutoff_time = cutoff_time.astimezone(timezone.utc)
             
             # For bulk deletion cutoff (14 days)
-            bulk_cutoff_time = datetime.now(timezone.utc) - timedelta(days=14)
+            bulk_cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.BULK_DELETE_DAYS)
             
             # Initialize skip channels and user names if first run
-            if not hasattr(self, 'skip_channel_objects'):
+            if not self.skip_channel_objects:
                 self.log.info(f"Initializing channel skip lists and user names")
-                
-                # Get channel objects for each skip list
-                self.skip_channel_objects = {}
-                for author_id, channel_names in self.skip_channels.items():
-                    self.skip_channel_objects[author_id] = []
-                    for channel_name in channel_names:
-                        channel = discord.utils.get(guild.text_channels, name=channel_name)
-                        if channel:
-                            self.skip_channel_objects[author_id].append(channel)
-                
-                # Prepare user name mapping for logging
-                self.user_names = {}
-                for author_id in self.author_ids:
-                    user = guild.get_member(author_id) or self.bot.get_user(author_id)
-                    self.user_names[author_id] = user.name if user else f"User:{author_id}"
+                self._initialize_skip_channels(guild)
+                self._initialize_user_names(guild)
             
             # Reset completion tracking
             self.processed_channels.clear()
             self.in_progress_channels.clear()
             self.pending_channels.clear()
             self.total_deleted = 0
-            self.deletion_stats = {author_id: 0 for author_id in self.author_ids}
+            self.deletion_stats = {author_id: 0 for author_id in self.AUTHOR_IDS}
                             
             # Start new batch of channels if none are in progress
             if not self.is_running:
@@ -119,7 +103,7 @@ class Clear(commands.Cog):
                 # Add all threads first (prioritize threads)
                 for thread in guild.threads:
                     # Skip threads whose parent is in the excluded category
-                    if hasattr(thread.parent, 'category_id') and thread.parent.category_id == self.skip_category_id:
+                    if hasattr(thread.parent, 'category_id') and thread.parent.category_id == self.SKIP_CATEGORY_ID:
                         self.log.info(f"Skipping thread {thread.name} (parent in excluded category)")
                         continue
                         
@@ -129,12 +113,12 @@ class Clear(commands.Cog):
                 # Then add all text channels
                 for channel in guild.text_channels:
                     # Skip channels in the excluded category
-                    if channel.category_id == self.skip_category_id:
+                    if channel.category_id == self.SKIP_CATEGORY_ID:
                         self.log.info(f"Skipping channel {channel.name} (in excluded category)")
                         continue
                         
                     # Check if at least one author needs processing in this channel
-                    for author_id in self.author_ids:
+                    for author_id in self.AUTHOR_IDS:
                         if channel not in self.skip_channel_objects.get(author_id, []):
                             self.pending_channels.append(channel)
                             break
@@ -210,14 +194,16 @@ class Clear(commands.Cog):
                     self.in_progress_channels.add(channel.id)
                     
                     # Process this channel in the background
+                    cutoff_time = datetime.now(eastern) - timedelta(days=self.MESSAGE_CLEANUP_DAYS)
+                    cutoff_time = cutoff_time.replace(hour=0, minute=0, second=0, microsecond=0)
+                    cutoff_time = cutoff_time.astimezone(timezone.utc)
+                    bulk_cutoff_time = datetime.now(timezone.utc) - timedelta(days=self.BULK_DELETE_DAYS)
+                    
                     asyncio.create_task(
                         self.process_channel(
                             channel=channel,
-                            author_ids=self.author_ids,
-                            skip_channels=self.skip_channel_objects,
-                            user_names=self.user_names,
-                            cutoff_time=datetime.now(eastern) - timedelta(days=3),  # Fresh cutoff time
-                            bulk_cutoff_time=datetime.now(timezone.utc) - timedelta(days=14)  # Fresh bulk cutoff
+                            cutoff_time=cutoff_time,
+                            bulk_cutoff_time=bulk_cutoff_time
                         )
                     )
                     
@@ -228,16 +214,56 @@ class Clear(commands.Cog):
         except Exception as e:
             self.log.error(f"Error filling slots: {str(e)}", exc_info=True)
     
-    async def process_channel(self, channel, author_ids, skip_channels, user_names, cutoff_time, bulk_cutoff_time):
+    def _initialize_skip_channels(self, guild):
+        """Initialize skip channel objects."""
+        for author_id, channel_names in self.SKIP_CHANNELS.items():
+            self.skip_channel_objects[author_id] = []
+            for channel_name in channel_names:
+                channel = discord.utils.get(guild.text_channels, name=channel_name)
+                if channel:
+                    self.skip_channel_objects[author_id].append(channel)
+    
+    def _initialize_user_names(self, guild):
+        """Initialize user name mapping for logging."""
+        for author_id in self.AUTHOR_IDS:
+            user = guild.get_member(author_id) or self.bot.get_user(author_id)
+            self.user_names[author_id] = user.name if user else f"User:{author_id}"
+    
+    def _should_delete_message(self, message, channel):
+        """Check if a message should be deleted."""
+        if message.author.id not in self.AUTHOR_IDS:
+            return False
+        if channel in self.skip_channel_objects.get(message.author.id, []):
+            return False
+        return True
+    
+    def _normalize_message_time(self, message_time):
+        """Normalize message time to UTC."""
+        if message_time.tzinfo is None:
+            return message_time.replace(tzinfo=timezone.utc)
+        return message_time
+    
+    async def _process_bulk_delete_batch(self, channel, bulk_batch, user_counts):
+        """Process a batch of messages for bulk deletion."""
+        try:
+            await channel.delete_messages(bulk_batch)
+            for msg in bulk_batch:
+                if msg.author.id in user_counts:
+                    user_counts[msg.author.id] += 1
+            self.log.info(f"  Bulk deleted {len(bulk_batch)} messages in {channel.name}")
+            return True
+        except Exception as e:
+            self.log.error(f"  Error bulk deleting messages in {channel.name}: {str(e)}")
+            return False
+    
+    async def process_channel(self, channel, cutoff_time, bulk_cutoff_time):
         """Process a single channel to delete messages from specified authors"""
         start_time = datetime.now()
-        if isinstance(channel, discord.Thread):
-            self.log.info(f"Starting to process thread: {channel.name} (in #{channel.parent.name})")
-        else:
-            self.log.info(f"Starting to process channel: {channel.name}")
+        channel_name = f"thread {channel.name} (in #{channel.parent.name})" if isinstance(channel, discord.Thread) else f"channel {channel.name}"
+        self.log.info(f"Starting to process {channel_name}")
         
         # Track deletion counts per user
-        user_counts = {author_id: 0 for author_id in author_ids}
+        user_counts = {author_id: 0 for author_id in self.AUTHOR_IDS}
         
         try:
             # Get all messages before the cutoff time
@@ -257,91 +283,54 @@ class Clear(commands.Cog):
                     else:
                         self.log.info(f"  Processed {messages_processed} messages in {channel.name} ({elapsed.total_seconds():.1f}s elapsed)")
                 
-                # Check if message author is in our target list
-                if message.author.id not in author_ids:
-                    continue
-                
-                # Skip if this author's messages should be preserved in this channel
-                if channel in skip_channels.get(message.author.id, []):
+                # Check if message should be deleted
+                if not self._should_delete_message(message, channel):
                     continue
                 
                 # Message needs to be deleted - determine how
-                author_id = message.author.id
-                message_time = message.created_at
-                if message_time.tzinfo is None:
-                    message_time = message_time.replace(tzinfo=timezone.utc)
-                
-                # Use bulk deletion for recent messages (recalculate cutoff time to handle long-running channels)
-                current_bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+                message_time = self._normalize_message_time(message.created_at)
+                current_bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=self.BULK_DELETE_DAYS)
                 
                 if message_time > current_bulk_cutoff:
                     bulk_delete_batch.append(message)
                     
-                    # Process bulk deletions in batches of 100
-                    if len(bulk_delete_batch) >= 100:
-                        try:
-                            await channel.delete_messages(bulk_delete_batch)
-                            # Track which users had messages deleted
-                            for msg in bulk_delete_batch:
-                                if msg.author.id in user_counts:
-                                    user_counts[msg.author.id] += 1
-                            
-                            self.log.info(f"  Bulk deleted {len(bulk_delete_batch)} messages in {channel.name}")
-                        except Exception as e:
-                            self.log.error(f"  Error bulk deleting messages in {channel.name}: {str(e)}")
-                            
+                    # Process bulk deletions in batches
+                    if len(bulk_delete_batch) >= self.BULK_DELETE_BATCH_SIZE:
+                        success = await self._process_bulk_delete_batch(channel, bulk_delete_batch, user_counts)
+                        if not success:
                             # If bulk deletion fails, add to individual deletion
                             for msg in bulk_delete_batch:
                                 individual_delete_tasks.append((msg, msg.author.id))
-                        
                         bulk_delete_batch = []
                 else:
                     # Individual deletion for older messages
-                    individual_delete_tasks.append((message, author_id))
+                    individual_delete_tasks.append((message, message.author.id))
                     
                     # Process individual deletions in batches
-                    if len(individual_delete_tasks) >= 25:
+                    if len(individual_delete_tasks) >= self.INDIVIDUAL_DELETE_BATCH_SIZE:
                         deleted_count = await self._process_individual_deletes(individual_delete_tasks, channel.name)
                         # Update user counts
                         for msg, user_id in individual_delete_tasks:
                             if deleted_count > 0 and user_id in user_counts:
                                 user_counts[user_id] += 1
-                                deleted_count -= 1  # Distribute deletions among users
+                                deleted_count -= 1
                         individual_delete_tasks = []
             
             # Process any remaining bulk deletions
             if bulk_delete_batch:
-                try:
-                    # Verify all messages are still eligible for bulk deletion
-                    current_bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=14)
-                    eligible_for_bulk = True
-                    
-                    for msg in bulk_delete_batch:
-                        msg_time = msg.created_at
-                        if msg_time.tzinfo is None:
-                            msg_time = msg_time.replace(tzinfo=timezone.utc)
-                        
-                        if msg_time <= current_bulk_cutoff:
-                            eligible_for_bulk = False
-                            break
-                    
-                    if eligible_for_bulk:
-                        # All messages are recent enough for bulk deletion
-                        await channel.delete_messages(bulk_delete_batch)
-                        # Track which users had messages deleted
-                        for msg in bulk_delete_batch:
-                            if msg.author.id in user_counts:
-                                user_counts[msg.author.id] += 1
-                        
-                        self.log.info(f"  Bulk deleted {len(bulk_delete_batch)} messages in {channel.name}")
-                    else:
-                        # Some messages are too old, process individually
-                        self.log.info(f"  Some messages too old for bulk deletion, processing {len(bulk_delete_batch)} individually")
+                current_bulk_cutoff = datetime.now(timezone.utc) - timedelta(days=self.BULK_DELETE_DAYS)
+                eligible_for_bulk = all(
+                    self._normalize_message_time(msg.created_at) > current_bulk_cutoff
+                    for msg in bulk_delete_batch
+                )
+                
+                if eligible_for_bulk:
+                    success = await self._process_bulk_delete_batch(channel, bulk_delete_batch, user_counts)
+                    if not success:
                         for msg in bulk_delete_batch:
                             individual_delete_tasks.append((msg, msg.author.id))
-                except Exception as e:
-                    self.log.error(f"  Error bulk deleting remaining messages in {channel.name}: {str(e)}")
-                    # If bulk deletion fails, add to individual deletion
+                else:
+                    self.log.info(f"  Some messages too old for bulk deletion, processing {len(bulk_delete_batch)} individually")
                     for msg in bulk_delete_batch:
                         individual_delete_tasks.append((msg, msg.author.id))
             
@@ -364,16 +353,11 @@ class Clear(commands.Cog):
                     self.deletion_stats[author_id] = self.deletion_stats.get(author_id, 0) + count
                     self.total_deleted += count
             
-            if isinstance(channel, discord.Thread):
-                channel_description = f"thread {channel.name} (in #{channel.parent.name})"
-            else:
-                channel_description = f"channel {channel.name}"
-                
             if total_deleted > 0:
-                user_summary = ", ".join([f"{user_names[uid]}: {count}" for uid, count in user_counts.items() if count > 0])
-                self.log.info(f"Completed {channel_description} in {elapsed_time.total_seconds():.1f}s: {total_deleted} messages deleted ({user_summary})")
+                user_summary = ", ".join([f"{self.user_names[uid]}: {count}" for uid, count in user_counts.items() if count > 0])
+                self.log.info(f"Completed {channel_name} in {elapsed_time.total_seconds():.1f}s: {total_deleted} messages deleted ({user_summary})")
             else:
-                self.log.info(f"Completed {channel_description} in {elapsed_time.total_seconds():.1f}s: No messages deleted")
+                self.log.info(f"Completed {channel_name} in {elapsed_time.total_seconds():.1f}s: No messages deleted")
             
         except discord.errors.Forbidden:
             self.log.warning(f"No permission to access or delete messages in {channel.name}")

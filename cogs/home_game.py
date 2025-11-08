@@ -9,9 +9,7 @@ from discord.ext import commands
 from hockey.schedule import Schedule
 
 from util import settings
-
-import logging
-from logging.handlers import RotatingFileHandler
+from util.logger import setup_logger
 
 eastern = zoneinfo.ZoneInfo("US/Eastern")
 
@@ -19,11 +17,7 @@ class Home_Game(commands.Cog):
     def __init__(self, bot: discord.Bot):
         self.bot = bot
         self.cfg = settings.Settings()
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/home_game.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/home_game.log')
 
         self.home_game.start()
         self.log.info("Home_Game initialized.")

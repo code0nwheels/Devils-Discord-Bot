@@ -171,16 +171,10 @@ class Game:
         utctz = pytz.timezone('UTC')
         return utctz.localize(datetime.strptime(self.game_object['startTimeUTC'], "%Y-%m-%dT%H:%M:%SZ"))
     
-    def raw_pregame_time(self, minutes_before_start: int=30) -> datetime:
-        """
-        Get the raw pregame time.
-        """
-        return self.raw_game_time - timedelta(minutes=minutes_before_start)
-    
     @property
     def raw_pregame_time(self) -> datetime:
         """
-        Get the raw pregame time.
+        Get the raw pregame time (30 minutes before game start).
         """
         return self.raw_game_time - timedelta(minutes=30)
     
@@ -188,7 +182,8 @@ class Game:
         """
         Get the pregame time in the specified format.
         """
-        return self.raw_pregame_time(minutes_before_start).astimezone(pytz.timezone(timezone)).strftime(format)
+        pregame_dt = self.raw_game_time - timedelta(minutes=minutes_before_start)
+        return pregame_dt.astimezone(pytz.timezone(timezone)).strftime(format)
 
     @property
     def away_team_record(self) -> str:

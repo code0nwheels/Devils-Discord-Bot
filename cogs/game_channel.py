@@ -1,12 +1,10 @@
 ﻿from hockey.schedule import Schedule
 from hockey.game import Game
 from util import settings
+from util.logger import setup_logger
 
 import zoneinfo
 from discord.ext import commands, tasks
-
-import logging
-from logging.handlers import RotatingFileHandler
 
 import asyncio
 from datetime import datetime
@@ -23,13 +21,7 @@ class GameChannel(commands.Cog):
         self.cfg = settings.Settings()
         self.schedule = Schedule()
         self.current_game = None
-
-        logging.basicConfig(level=logging.INFO)
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/game_channel.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/game_channel.log')
 
         self.run_tasks.start()
         self.log.info("GameChannel cog initialized.")
@@ -186,4 +178,3 @@ class GameChannel(commands.Cog):
 
 def setup(bot: commands.Bot) -> None:
     bot.add_cog(GameChannel(bot))
-    logging.getLogger(__name__).info("GameChannel cog setup complete.")

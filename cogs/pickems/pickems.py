@@ -1,14 +1,12 @@
 from hockey.game import Game
 from hockey.schedule import Schedule
 from util import settings
+from util.logger import setup_logger
 
 from discord.utils import get
 from util.game_view import GameView
 from util import create_embed
 from database.pickems_database import PickemsDatabase
-
-import logging
-from logging.handlers import RotatingFileHandler
 
 from discord.ext import tasks, commands
 
@@ -25,12 +23,7 @@ class Pickems(commands.Cog):
         self.cfg = settings.Settings()
         self.schedule = Schedule()
         self.db = PickemsDatabase()
-        
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/pickems.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/pickems.log')
 
         self.run.start()
         self.log.info("Pickems initialized.")

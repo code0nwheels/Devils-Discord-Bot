@@ -5,21 +5,14 @@ import zoneinfo
 import asyncio
 
 from hockey.schedule import Schedule
-
-import logging
-from logging.handlers import RotatingFileHandler
+from util.logger import setup_logger
 
 eastern = zoneinfo.ZoneInfo("US/Eastern")
 
 class GameDay(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-        self.log = logging.getLogger(__name__)
-        handler = RotatingFileHandler('log/game_day.log', maxBytes=5*1024*1024, backupCount=5)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.log.addHandler(handler)
+        self.log = setup_logger(__name__, 'log/game_day.log')
 
         self.check_game_day.start()
         self.log.info("GameDay initialized.")

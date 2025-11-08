@@ -1,10 +1,8 @@
 import os
 import discord
 from util import settings
+from util.logger import setup_logger
 from discord.ext import commands
-
-import logging
-from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -21,16 +19,7 @@ bot = commands.Bot(intents=intents)
 bot.remove_command('help')
 bot.owner_id = os.getenv("OWNER_ID")
 cfg = settings.Settings()
-logging.basicConfig(level=logging.INFO)
-log = logging.getLogger(__name__)
-# add a rotating handler
-handler = RotatingFileHandler('log/main.log', maxBytes=5*1024*1024,
-							  backupCount=5)
-
-# create a logging format
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-log.addHandler(handler)
+log = setup_logger(__name__, 'log/main.log')
 
 # loop through the cogs directory and load all the cogs
 for filename in os.listdir('./cogs'):
@@ -52,9 +41,6 @@ async def on_ready():
 			os.remove(lock_file)
 			
 		log.info(f'client connected as {bot.user}')
-
-		"""a = client.get_cog('Admins')
-		await a.setup_banished()"""
 
 		ran = True
 

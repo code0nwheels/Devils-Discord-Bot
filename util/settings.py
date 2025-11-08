@@ -1,6 +1,8 @@
 import configparser
 import os
 import ast
+import logging
+from logging.handlers import RotatingFileHandler
 
 CONFIG_FILE = 'config.ini'
 
@@ -11,6 +13,14 @@ class Settings(object):
 		super(Settings, self).__init__()
 
 		self.config = configparser.ConfigParser()
+		
+		# Setup logger
+		self.log = logging.getLogger(__name__)
+		handler = RotatingFileHandler('log/settings.log', maxBytes=5*1024*1024, backupCount=5)
+		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+		handler.setFormatter(formatter)
+		self.log.addHandler(handler)
+		self.log.setLevel(logging.INFO)
 
 		if not os.path.exists(CONFIG_FILE):
 			with open(CONFIG_FILE, 'w'):

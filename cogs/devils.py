@@ -1,9 +1,7 @@
 # devils.py
 
 import os
-import logging
 from datetime import datetime
-from logging.handlers import RotatingFileHandler
 
 import discord
 from discord.ext import commands, pages
@@ -14,6 +12,7 @@ from dotenv import load_dotenv
 
 from util import create_embed, settings, report_view
 from util.dicts import team_dict
+from util.logger import setup_logger
 from hockey.schedule import Schedule
 
 load_dotenv()
@@ -24,14 +23,7 @@ class Devils(commands.Cog):
 	def __init__(self, bot):
 		self.bot = bot
 		self.cfg = settings.Settings()
-
-		# Setup logging
-		self.log = logging.getLogger(__name__)
-		handler = RotatingFileHandler('log/devils.log', maxBytes=5*1024*1024, backupCount=5)
-		formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-		handler.setFormatter(formatter)
-		self.log.addHandler(handler)
-		self.log.setLevel(logging.INFO)
+		self.log = setup_logger(__name__, 'log/devils.log')
 
 	game_commands = SlashCommandGroup(name="game", description="Commands related to games.")
 
