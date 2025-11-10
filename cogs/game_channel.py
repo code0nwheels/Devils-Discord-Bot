@@ -10,6 +10,7 @@ import asyncio
 from datetime import datetime
 
 from util import game_channel
+from util.game_channel import REMINDER_MESSAGE, REMINDER_INTERVAL
 
 PREGAME_TIME = 60 * 30
 CLOSE_DELAY = 60 * 5
@@ -60,7 +61,8 @@ class GameChannel(commands.Cog):
     async def open_game_channel(self, game: Game) -> None:
         self.log.info("Opening game channel.")
 
-        await game_channel.open_channel(self.bot, f"Game chat is open! We're playing the **{game.playing_against}**!")
+        opening_message = f"Game chat is open! We're playing the **{game.playing_against}**!\n\n{REMINDER_MESSAGE}"
+        await game_channel.open_channel(self.bot, opening_message)
 
     async def close_game_channel(self, cur_game: Game, next_game: Game) -> None:
         self.log.info("Closing game channel.")
@@ -169,11 +171,26 @@ class GameChannel(commands.Cog):
 
     async def wait_until_over(self, game: Game) -> None:
         self.log.info(f"Waiting for game {game.game_id} to be over.")
+        last_reminder_time = datetime.now()
         while True:
             await game.refresh()
             if game.is_final or game.is_ppd or game.is_cancelled:
                 self.log.info(f"Game {game.game_id} is over or cancelled.")
                 break
+            
+            # Check if 15 minutes have passed since last reminder
+            current_time = datetime.now()
+            time_since_last_reminder = (current_time - last_reminder_time).total_seconds()
+            if time_since_last_reminder >= REMINDER_INTERVAL:
+                try:
+                    is_closed = await game_channel.is_closed(self.bot)
+                    if not is_closed:
+                        self.log.info("Posting periodic reminder message")
+                        await game_channel.send_message(self.bot, REMINDER_MESSAGE)
+                        last_reminder_time = current_time
+                except Exception as e:
+                    self.log.error(f"Error posting reminder message: {str(e)}", exc_info=True)
+            
             await asyncio.sleep(60)
 
 def setup(bot: commands.Bot) -> None:

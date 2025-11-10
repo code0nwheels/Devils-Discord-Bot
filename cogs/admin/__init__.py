@@ -32,6 +32,7 @@ class Admins(
 	def __init__(self, bot: Bot):
 		# Initialize mixins
 		BanishMixin.__init__(self)
+		GameChannelsMixin.__init__(self)
 		
 		self.bot = bot
 		self.cfg = Settings()
@@ -44,6 +45,10 @@ class Admins(
 	
 	def cog_unload(self):
 		"""Cleanup when cog is unloaded."""
+		# Stop reminder task if running
+		if hasattr(self, 'periodic_reminder') and self.periodic_reminder.is_running():
+			self.periodic_reminder.cancel()
+		
 		if hasattr(self, 'loop') and self.loop is not None:
 			self.loop.close()
 
