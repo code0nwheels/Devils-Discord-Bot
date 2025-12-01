@@ -1,6 +1,6 @@
 ﻿# Reminder message constants - defined first to ensure they're always available
 REMINDER_MESSAGE = "As a reminder, please utilize `/report` and `/openhelp` to report any messages to the Admin team. More information can be found here: https://discord.com/channels/348223375598157825/897645705517232178/898351381482733588"
-REMINDER_INTERVAL = 60 * 30  # 30 minutes in seconds
+REMINDER_INTERVAL = 60 * 60  # 1 hour in seconds
 
 import discord
 from discord.utils import get
