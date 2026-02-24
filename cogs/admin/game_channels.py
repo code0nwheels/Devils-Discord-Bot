@@ -14,20 +14,29 @@ from datetime import datetime
 
 load_dotenv()
 guild_id = int(os.getenv('GUILD_ID'))
+mod_role_id = 1468698871743119403
 
 
 class GameChannelsMixin:
 	"""Mixin for game channel commands."""
+	
+	def is_mod_or_admin(self, ctx):
+		"""Check if user has moderator or administrator permissions."""
+		if ctx.author.guild_permissions.administrator:
+			return True
+		return any(role.id == mod_role_id for role in ctx.author.roles)
 	
 	def __init__(self):
 		# Initialize reminder tracking
 		self.last_reminder_time = None
 	
 	@commands.slash_command(guild_ids=[guild_id], name='open', description='Opens game chat.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('message', description='Enter the message to send', required=False)
 	async def open(self, ctx, message: str = None):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		self.log.info(f"{ctx.author} opened game channels")
 		
 		# Append reminder to message if provided, otherwise use default with reminder
@@ -52,10 +61,12 @@ class GameChannelsMixin:
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 	
 	@commands.slash_command(guild_ids=[guild_id], name='close', description='Closes game chat.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('message', description='Enter the message to send', required=False)
 	async def close(self, ctx, message: str = None):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		self.log.info(f"{ctx.author} closed game channels")
 		
 		# Stop reminder task if running

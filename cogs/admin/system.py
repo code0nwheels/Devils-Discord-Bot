@@ -12,10 +12,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 guild_id = int(os.getenv('GUILD_ID'))
+mod_role_id = 1468698871743119403
 
 
 class SystemMixin:
 	"""Mixin for system commands."""
+	
+	def is_mod_or_admin(self, ctx):
+		"""Check if user has moderator or administrator permissions."""
+		if ctx.author.guild_permissions.administrator:
+			return True
+		return any(role.id == mod_role_id for role in ctx.author.roles)
 	
 	@commands.slash_command(guild_ids=[guild_id], name='restart', description='Restarts the bot.')
 	@commands.has_permissions(administrator=True)
@@ -106,12 +113,14 @@ class SystemMixin:
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 	
 	@commands.slash_command(guild_ids=[guild_id], name='timeout', description='Timeout users.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('user', description='Enter the user to timeout')
 	@discord.commands.option('duration', description='Enter the duration')
 	@discord.commands.option('reason', description='Enter the reason for the timeout', required=False)
 	async def timeout(self, ctx, user: discord.Member, duration: str, reason: str = 'None'):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		self.log.info(f"{ctx.author} is timeouting {user.name}")
 		
 		try:

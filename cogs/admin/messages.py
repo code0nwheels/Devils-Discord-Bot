@@ -10,10 +10,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 guild_id = int(os.getenv('GUILD_ID'))
+mod_role_id = 1468698871743119403
 
 
 class MessagesMixin:
 	"""Mixin for message commands."""
+	
+	def is_mod_or_admin(self, ctx):
+		"""Check if user has moderator or administrator permissions."""
+		if ctx.author.guild_permissions.administrator:
+			return True
+		return any(role.id == mod_role_id for role in ctx.author.roles)
 	
 	async def _wait_for_message(self, ctx, timeout=300):
 		"""Helper method to wait for a message from the user."""
@@ -28,12 +35,14 @@ class MessagesMixin:
 			return None
 	
 	@commands.slash_command(guild_ids=[guild_id], name='say', description='Send a message as the bot.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('message', description='Enter the message to send', required=False)
 	@discord.commands.option('channel', description='Enter the channel to send the message to', type=discord.TextChannel, required=False)
 	@discord.commands.option('attachment', description='Attach a file', required=False)
 	async def say(self, ctx, channel: discord.TextChannel = None, message: str = None, attachment: discord.Attachment = None):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		if not channel:
 			channel = ctx.channel
 		
@@ -60,10 +69,12 @@ class MessagesMixin:
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 	
 	@commands.slash_command(guild_ids=[guild_id], name='editmsg', description='Edit a message the bot posted.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('message_id', description='Enter the message ID to edit')
 	async def editmsg(self, ctx, message_id: str):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		messageObj = await commands.MessageConverter().convert(ctx, message_id)
 		self.log.info(f"{ctx.author} is editing message {messageObj.id}")
 		
@@ -89,12 +100,14 @@ class MessagesMixin:
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 	
 	@commands.slash_command(guild_ids=[guild_id], name='reply', description='Reply to a message as the bot.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('message_id', description='Enter the message ID to reply to')
 	@discord.commands.option('message', description='Enter the message to send', required=False)
 	@discord.commands.option('attachment', description='Attach a file', required=False)
 	async def reply(self, ctx, message_id: str, message: str = None, attachment: discord.Attachment = None):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		messageObj = await commands.MessageConverter().convert(ctx, message_id)
 		self.log.info(f"{ctx.author} is replying to a message")
 		file = None

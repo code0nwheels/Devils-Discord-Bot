@@ -11,7 +11,6 @@ from database.database import Database
 from .game_channels import GameChannelsMixin
 from .settings import SettingsMixin
 from .roles import RolesMixin
-from .banish import BanishMixin
 from .messages import MessagesMixin
 from .system import SystemMixin
 from .incidents import IncidentsMixin
@@ -21,7 +20,6 @@ class Admins(
 	GameChannelsMixin,
 	SettingsMixin,
 	RolesMixin,
-	BanishMixin,
 	MessagesMixin,
 	SystemMixin,
 	IncidentsMixin,
@@ -31,7 +29,6 @@ class Admins(
 	
 	def __init__(self, bot: Bot):
 		# Initialize mixins
-		BanishMixin.__init__(self)
 		GameChannelsMixin.__init__(self)
 		
 		self.bot = bot

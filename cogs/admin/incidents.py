@@ -12,18 +12,27 @@ from dotenv import load_dotenv
 
 load_dotenv()
 guild_id = int(os.getenv('GUILD_ID'))
+mod_role_id = 1468698871743119403
 
 
 class IncidentsMixin:
 	"""Mixin for incident report commands."""
 	
+	def is_mod_or_admin(self, ctx):
+		"""Check if user has moderator or administrator permissions."""
+		if ctx.author.guild_permissions.administrator:
+			return True
+		return any(role.id == mod_role_id for role in ctx.author.roles)
+	
 	@commands.slash_command(guild_ids=[guild_id], name='create_incident', description='Create an incident report.')
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('user', description='Enter the user to create an incident report for')
 	@discord.commands.option('description', description='Enter the description of the incident')
 	@discord.commands.option('decision', description='Enter the decision of the incident')
 	async def create_incident(self, ctx, user: discord.Member, description: str, decision: str):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		self.log.info(f"{ctx.author} is creating an incident report.")
 		
 		reported_by = str(ctx.author.id)
@@ -40,11 +49,13 @@ class IncidentsMixin:
 		await ctx.respond("Oops, something went wrong!", ephemeral=True)
 	
 	@commands.slash_command(guild_ids=[guild_id], name="get_incident", description="Gets incident reports for the specified user")
-	@commands.has_permissions(administrator=True)
-	@discord.default_permissions(administrator=True)
 	@discord.commands.option('user', description='Enter the user to get incident reports for', required=False)
 	@discord.commands.option('user_id', description='Enter the user to get incident reports for', required=False)
 	async def get_incident(self, ctx, user: discord.Member = None, user_id: str = None):
+		if not self.is_mod_or_admin(ctx):
+			await ctx.respond("You don't have permission to use this command!", ephemeral=True)
+			return
+		
 		if not user and not user_id:
 			await ctx.respond("I can't read your mind! Enter a user.")
 			return
