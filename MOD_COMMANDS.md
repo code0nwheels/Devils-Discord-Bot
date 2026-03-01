@@ -232,9 +232,9 @@ Timeout (mute) a user for a specified duration.
 
 **What This Does:**
 1. Applies a Discord timeout to the user for the specified duration
-2. **Automatically creates an incident report** with:
+2. **If `reason` is provided:** Automatically creates an incident report with:
    - User ID
-   - Reason provided (or "None")
+   - Reason provided
    - Decision: "Timed out for [duration]"
    - Your user ID as the moderator
    - Current timestamp
@@ -242,14 +242,16 @@ Timeout (mute) a user for a specified duration.
 4. Logs the action to the bot's admin log file
 
 **Important Notes:**
-- **Automatically creates an incident report** - you don't need to create one separately
+- **⚠️ Automatically creates an incident report ONLY if you provide a `reason`**
+  - If no reason is given, the timeout is applied but no incident report is created
+  - Best practice: Always include a reason to maintain proper records
 - The user will be unable to:
   - Send messages in any channel
   - Add reactions to messages
   - Speak in voice channels
   - Join voice channels
 - The timeout is automatically removed after the duration expires
-- The incident report is permanent and can be retrieved with `/get_incident`
+- The incident report (if created) is permanent and can be retrieved with `/get_incident`
 - If duration parsing fails, you'll receive an error message
 
 ---
@@ -550,7 +552,7 @@ Reload a bot cog/module.
 1. **Enable Developer Mode** in Discord Settings → Advanced → Developer Mode to easily copy message and user IDs
 2. **Incident Reports** should be created for any significant moderation action to maintain a permanent record
 3. **Game Channels** automatically post reminders every 15 minutes when open - no need to manually remind users
-4. **⚠️ Timeouts automatically create incident reports** - you don't need to create a separate one after using `/timeout`
+4. **⚠️ Timeouts automatically create incident reports ONLY if you include a `reason`** - always provide a reason to maintain proper records
 5. **Message Management** commands (`/say`, `/editmsg`, `/reply`) are useful for announcements and community management
 6. **Check User History** with `/get_incident` before taking action on repeat offenders
 7. **Be Specific** in incident reports - include context, what rule was violated, and any relevant message links
@@ -571,12 +573,20 @@ Reload a bot cog/module.
 3. After game ends: /close message:"Great game everyone!"
 ```
 
-### Handling a Rule Violation
+### Handling a Rule Violation with Timeout
 ```
 1. /timeout user:@Offender duration:1h reason:"Violated rule #3"
-   ⚠️ This automatically creates an incident report - no need to create one separately!
+   ⚠️ Including the reason automatically creates an incident report - no need to create one separately!
 2. Optional: /say message:"Reminder to everyone: Please follow rule #3!" channel:#general
 3. Optional: Document in mod channel: /say message:"@Offender timed out for 1h - rule #3 violation" channel:#mod-log
+```
+
+### Quick Timeout Without Documentation
+```
+1. /timeout user:@User duration:10m
+   Note: No reason provided = no incident report created
+2. Use this for very minor/temporary timeouts that don't need permanent records
+3. For anything that should be tracked, always include a reason!
 ```
 
 ### Handling a Warning (No Timeout)
