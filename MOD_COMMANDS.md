@@ -2,6 +2,7 @@
 
 This document provides a comprehensive guide to all moderator commands available in the Devils Discord Bot.
 
+## Table of Contents
 - [Game Channel Management](#game-channel-management)
 - [Message Management](#message-management)
 - [Role Management](#role-management)
