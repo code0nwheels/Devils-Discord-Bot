@@ -31,8 +31,11 @@ class PicOfMonth(commands.Cog):
         
         try:
             reaction_count = {}
-            channels = ['food-topia', 'nature-talk']
-            winner_roles = [1310645896010268672, 1310646176701354094]
+            channels = {
+                'food-topia': 1310645896010268672,
+                'nature-talk': 1310646176701354094,
+                'pets': 1489345320965111859
+            }
             congrats_message = "Congratulations {0.mention}! Your message has been selected as the picture of the month! 🎉🎉🎉\n[Click here to view]({1.jump_url})"
 
             # get all messages in channel from last month
@@ -62,7 +65,7 @@ class PicOfMonth(commands.Cog):
             guild = await self.bot.fetch_guilds().flatten()
             guild = guild[0]
 
-            for i, channel_name in enumerate(channels):
+            for channel_name, winner_role in channels.items():
                 channel = get(self.bot.get_all_channels(), name=channel_name)
                 reaction_count = {}
                 
@@ -91,7 +94,7 @@ class PicOfMonth(commands.Cog):
                 max_reaction = max(reaction_count, key=reaction_count.get)
                 message = await channel.fetch_message(max_reaction)
                 
-                role = get(message.author.guild.roles, id=winner_roles[i])
+                role = get(message.author.guild.roles, id=winner_role)
                 members = role.members
                 if len(members) > 0:
                     for member in members:
