@@ -3,13 +3,14 @@ import os
 from dotenv import load_dotenv
 from util.logger import setup_logger
 
+load_dotenv()
+
 class Database:
 	def __init__(self):
 		self.pool = None
 		self.log = setup_logger(__name__, 'log/db.log')
 
 	async def login(self):
-		load_dotenv()
 		dbinfo = [os.getenv("DB_USER"), os.getenv("DB_PASSWORD"), os.getenv("DB_NAME")]
 
 		self.pool = await aiomysql.create_pool(host='127.0.0.1', port=3306,

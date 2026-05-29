@@ -3,13 +3,14 @@ import os
 from dotenv import load_dotenv
 from util.logger import setup_logger
 
+load_dotenv()
+
 class Database:
     def __init__(self):
         self.conn = None
         self.log = setup_logger(__name__, 'log/db.log')
 
     async def login(self):
-        load_dotenv()
         dbinfo = "database/" + os.getenv("DB_NAME")
 
         self.conn = await aiosqlite.connect(dbinfo)
